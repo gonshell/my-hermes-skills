@@ -53,7 +53,7 @@ build_sync_list() {
         done
     elif [[ "$MODE" == "all" ]]; then
         # 同步全部
-        find "$SKILLS_DIR" -maxdepth 2 -name "SKILL.md" -type f | \
+        find "$SKILLS_DIR" -maxdepth 5 -name "SKILL.md" -type f | \
             while read f; do
                 rel="${f#$SKILLS_DIR/}"
                 echo "${rel%/*}"
