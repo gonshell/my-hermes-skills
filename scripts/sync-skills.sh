@@ -98,7 +98,10 @@ main() {
     echo
 
     # 解析要同步的 skills
-    mapfile -t SKILLS < <(build_sync_list "$@")
+    mapfile -t SKILLS < <(build_sync_list "$@") 2>/dev/null || {
+        # macOS compatibility: use alternative
+        IFS=$'\n' read -d '' -r -a SKILLS <<< "$(build_sync_list "$@")" || true
+    }
     total=${#SKILLS[@]}
 
     if [[ $total -eq 0 ]]; then
