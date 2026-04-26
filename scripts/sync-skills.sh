@@ -146,7 +146,8 @@ main() {
             log_info "已提交: $COMMIT_MSG"
 
             # 尝试推送（可能失败如果没有配置 remote）
-            if git remote geturl origin &>/dev/null; then
+            # 用 --get 替代 geturl：兼容性更好，macOS 旧版 git 支持
+            if git config --get remote.origin.url >/dev/null 2>&1; then
                 if git push origin main 2>&1; then
                     log_info "已推送到 GitHub"
                 else
