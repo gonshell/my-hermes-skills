@@ -1,0 +1,3 @@
+#!/bin/sh
+# Weibo CLI entry point
+exec python -m weibo_cli "$@"

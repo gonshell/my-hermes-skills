@@ -26,9 +26,11 @@ triggers:
 - 按播放量排序
 
 ### 3. 当日新发热门视频
-- **长视频 TOP 5**：从最新发布中按播放量排序
-- **短视频 TOP 3**：从最新发布中按播放量排序
-- 参考来源频道：`https://www.youtube.com/@AIDailyBrief/videos`
+- **长视频 TOP 5**：从搜索结果页「最近アップロードされた動画」tab 按播放量排序
+- **短视频 TOP 3**：从搜索结果「すべて」标签提取含 `/shorts/` 链接的视频
+- 参考搜索页（同时包含长视频+Shorts混合流）：`https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude`
+
+**注意**：直接访问 `@AIDailyBrief/videos` 频道页时，`ytd-video-renderer` 的 `titleEl.href` 可能返回空字符串（链接丢失），导致提取的URL全部为空。推荐改用搜索结果页的「最近アップロードされた動画」tab（ref=e15）来获取最新上传视频，提取JS与长视频提取相同。
 
 ## 搜索URL模板
 
@@ -104,14 +106,24 @@ Array.from(document.querySelectorAll('ytd-video-renderer')).slice(0, 20).map((v,
 ```
 
 短视频数据提取：
+⚠️ `ytd-rich-item-renderer` 在搜索结果页的 Shorts 标签下返回空数组（2026年4月亲测）。必须使用下面的方案1或方案2。
+
+短视频数据仍可用同一搜索页「すべて」标签的JS提取（过滤 `/shorts/` 链接即可），无需切换到「ショート」tab。示例JS：
 ```javascript
-Array.from(document.querySelectorAll('ytd-rich-item-renderer')).slice(0, 15).map((v, i) => {
-  const title = v.querySelector('#video-title')?.textContent?.trim() || v.querySelector('a#video-title')?.textContent?.trim() || '';
-  const link = v.querySelector('#video-title, a#video-title')?.href || '';
-  const views = v.querySelector('#metadata-line span')?.textContent || '';
-  const channel = v.querySelector('#channel-name a, ytd-channel-name a')?.textContent?.trim() || '';
-  return {i, title, link, views, channel};
-}).filter(v => v.title)
+Array.from(document.querySelectorAll('ytd-video-renderer'))
+  .map(v => {
+    const titleEl = v.querySelector('#video-title');
+    const link = titleEl?.href || '';
+    const isShort = link.includes('/shorts/');
+    return {
+      title: titleEl?.textContent?.trim() || '',
+      link,
+      isShort,
+      metadata: Array.from(v.querySelectorAll('#metadata-line span')).map(s => s.textContent).join(' · ')
+    };
+  })
+  .filter(v => v.title && v.isShort)
+  .slice(0, 10)
 ```
 
 ## 提取字段
@@ -127,17 +139,17 @@ Array.from(document.querySelectorAll('ytd-rich-item-renderer')).slice(0, 15).map
 
 **更严重的问题**：`a[href*="/shorts/"]` 配合 `img.alt` 在 Shorts 页面会返回 `"true"` 字符串而非真实标题，因为 YouTube Shorts 的 img 标签 `alt` 属性值就是 `"true"`。
 
-**已验证可用的备选方案**：
+**已验证可用的备选方案（按可靠性排序）**：
 
-1. **使用 `最近アップロードされた動画` 标签**（推荐）：
-   - 在搜索结果页面点击"最近アップロードされた動画"标签获取最新上传
-   - 该标签下的视频仍使用 `ytd-video-renderer`，可正常提取
-   - Shorts 在这个标签下会显示为 `/shorts/` 链接但仍用 `ytd-video-renderer` 渲染
-
-2. **从搜索结果「すべて」标签提取含Shorts链接的视频**：
+1. **从搜索结果「すべて」标签过滤 Shorts（推荐，最高效）** ✅
    - 使用主搜索结果页（不过滤Shorts）提取所有 `ytd-video-renderer`
-   - 过滤出 `/shorts/` 链接的视频，手动记录播放量
-   - 示例JS：
+   - 过滤出 `/shorts/` 链接的视频，一趟搞定长视频+短视频
+   - 提取JS见上方「短视频数据提取」部分
+
+2. **搜索结果页「ショート」tab（次选）** ✅
+   - 点击页面内 tab 区域的「ショート」tab（ref=e11），而不是顶部导航的「ショート」链接
+   - 点击后会加载 Shorts 内容，仍使用 `ytd-video-renderer` 渲染，可正常提取
+   - 提取JS：
 ```javascript
 Array.from(document.querySelectorAll('ytd-video-renderer'))
   .map(v => {
@@ -151,7 +163,8 @@ Array.from(document.querySelectorAll('ytd-video-renderer'))
       metadata: Array.from(v.querySelectorAll('#metadata-line span')).map(s => s.textContent).join(' · ')
     };
   })
-  .filter(v => v.title && (v.isShort || v.link.includes('/watch?')))
+  .filter(v => v.title && v.isShort)
+  .slice(0, 10)
 ```
 
 3. **Shorts 页面备选方案**（数据质量较低）：
@@ -170,9 +183,11 @@ Array.from(document.querySelectorAll('a[href*="/shorts/"]'))
   }))
 ```
 
-3. **滚动加载后提取**：
-   - Shorts 页面需要滚动触发懒加载
-   - 可用 `browser_scroll(direction='down')` 后等待再提取
+**已知失效方案（2026年4月亲测）**：
+- `ytd-rich-item-renderer` 在搜索结果页的 Shorts 标签下返回空数组
+- `a[href*="/shorts/"]` 配合 `img.alt` 在 Shorts 页面返回 `"true"` 而非真实标题
+- 顶部导航的「ショート」链接会跳转到独立的 Shorts 主页，体验不同于搜索结果内的 Shorts 标签
+- 直接访问 YouTube 频道页（如 `@AIDailyBrief/videos`）时，`titleEl.href` 返回空字符串，导致提取的 watch URL 全部丢失
 
 ## 摘要生成
 根据视频标题和描述生成2-3句话的简单摘要，说明视频主要内容。

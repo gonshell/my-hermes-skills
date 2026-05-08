@@ -246,11 +246,17 @@ URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+Deep
 ### 1. duration=4 参数严重不可靠（重要！）
 - **问题**：`duration=4`（3天内）在 browser 环境下几乎总是返回2025年甚至更老的视频
 - **原因**：B站搜索API的日期过滤在非登录态/headless环境下失效
-- **解决方案**：
-  - 改用 `duration=1`（10分钟内）+ 更精确的搜索词
-  - 搜索词使用具体年月如 `DeepSeek V4 GPT Claude AI 2026` 或 `2026年最新 AI`
-  - 补充采集 `order=pubdate&duration=1` 的最新发布结果
-  - 接受视频实际日期，用代码层面过滤 freshness > 0
+- **解决方案（实测有效）**：
+  1. 使用 `duration=1`（10分钟内）+ 在搜索词中包含年月：`DeepSeek 2026年4月` 或 `AI 2026 4月最新`
+  2. 使用 `order=pubdate&duration=1` 获取最新发布内容
+  3. 在代码层面按实际日期过滤 freshness > 0（7天内）
+  4. **最佳实践**：多次搜索组合——通用AI词+年月词 + 细分领域词+年月词
+
+```bash
+# 实测有效的搜索URL模式
+https://search.bilibili.com/video?keyword=DeepSeek%20RAG%20Agent%202026%204%E6%9C%88&order=pubdate&duration=1
+https://search.bilibili.com/video?keyword=AI%202026%204%E6%9C%88%E6%9C%80%E6%96%B0&order=pubdate&duration=1
+```
 
 ### 2. 播放量 + 视频时长混合字段解析
 - **DOM格式**：`"1.4万 4 01:01"` 或 `"4245 32 01:41"` — 格式为「播放量 点赞数? 时长」
@@ -270,27 +276,59 @@ URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+Deep
 
 ### 3. 日期解析（相对日期 → 实际日期）
 Bilibili 搜索结果使用相对日期格式，必须转换：
-| 显示格式 | 含义 | 转换结果（假设2026-04-26） |
+| 显示格式 | 含义 | 转换结果（假设2026-04-27） |
 |----------|------|--------------------------|
-| `昨天` | 昨天 | 2026-04-25 |
-| `3小时前` / `刚刚` | 几小时前 | 2026-04-26（当天） |
-| `前天` | 前天 | 2026-04-24 |
-| `04-20` | 月-日 | 2026-04-20 |
+| `昨天` | 昨天 | 2026-04-26 |
+| `3小时前` / `刚刚` | 几小时前 | 2026-04-27（当天） |
+| `前天` | 前天 | 2026-04-25 |
+| `04-20` | 月-日 | 2026-04-20（如月<=当前月则当年，否则去年） |
+
+⚠️ **CRITICAL BUG FOUND**: `昨天` 和 `前天` 有时不会被作者的「·」分隔解析捕获，直接以原始字符串形式出现在date字段中！必须在提取后额外处理这些相对日期字符串。
 
 ```python
-def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 26)):
+def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
+    if not date_str:
+        return None, None
+    date_str = date_str.strip()
+    
+    # 关键：先检查是否包含小时前/昨天/前天等相对日期
+    if '小时前' in date_str or date_str == '刚刚':
+        # 计算小时数
+        if '小时前' in date_str:
+            try:
+                hours = int(re.search(r'(\d+)', date_str).group(1))
+                pub_date = current_date - timedelta(hours=hours)
+            except:
+                pub_date = current_date
+        else:
+            pub_date = current_date
+        return pub_date, pub_date.strftime('%m-%d')
+    
     if date_str == '昨天':
-        return current_date - timedelta(days=1)
-    elif '小时前' in date_str or '小时前' == date_str:
-        return current_date  # 当天
+        pub_date = current_date - timedelta(days=1)
+        return pub_date, '昨天'
     elif date_str == '前天':
-        return current_date - timedelta(days=2)
-    elif '-' in date_str:
-        # MM-DD format, assume current year
-        m, d = map(int, date_str.split('-'))
-        return datetime(current_date.year, m, d)
-    return None
+        pub_date = current_date - timedelta(days=2)
+        return pub_date, '前天'
+    elif '-' in date_str and len(date_str) == 5:  # MM-DD格式
+        try:
+            m, d = map(int, date_str.split('-'))
+            # 如果月份大于当前月份，说明是今年；否则是去年（跨年问题）
+            year = current_date.year if m <= current_date.month else current_date.year - 1
+            pub_date = datetime(year, m, d)
+            return pub_date, date_str
+        except:
+            return None, date_str
+    elif '-' in date_str and len(date_str) == 10:  # YYYY-MM-DD格式
+        try:
+            pub_date = datetime.strptime(date_str, '%Y-%m-%d')
+            return pub_date, date_str
+        except:
+            return None, date_str
+    return None, date_str
 ```
+
+**重要**：返回两个值 — (datetime对象, 原始/格式化字符串)，因为 `昨天` 这种相对日期需要保留用于显示，但在计算freshness时必须用datetime。
 
 ### 4. 长视频 vs 小视频分类阈值
 - **B站标准**：小视频通常 ≤ 5分钟（300秒）

@@ -14,7 +14,17 @@ Extract transcripts from YouTube videos and convert them into useful formats.
 ## Setup
 
 ```bash
-pip install youtube-transcript-api
+# IMPORTANT: Use the correct Python interpreter — multiple Pythons may be on PATH
+# Correct interpreter (Hermes uv venv):
+/Users/xiesg/.hermes/hermes-agent/venv/bin/python3
+
+# Install to the correct venv:
+/Users/xiesg/.hermes/hermes-agent/venv/bin/python3 -m pip install youtube-transcript-api
+# OR use uv:
+uv pip install youtube-transcript-api  # must run in the hermes-agent dir context
+
+# Verify:
+/Users/xiesg/.hermes/hermes-agent/venv/bin/python3 -c "import youtube_transcript_api; print('ok')"
 ```
 
 ## Helper Script
@@ -178,6 +188,21 @@ document.querySelector('meta[itemprop="datePublished"]')?.content || ''
 })();
 ```
 
-> **Note:** The browser console fetch works because the browser has the correct IP session cookies. The server-side `api/timedtext` URL extraction + re-fetch pattern always fails due to IP-signature mismatch.
+> **Note:** The browser console fetch works only if the browser uses a **residential IP**. In Hermes, the browser shares the same datacenter exit IP as `terminal()` — if YouTube blocks that IP, even the browser console fetch fails silently (returns empty). In that case, no server-side approach works; transcript is unavailable unless the user runs locally on their residential IP.
+
+### Two Distinct Failure Modes (Critical)
+
+YouTube transcript failures have **two different root causes**:
+
+1. **IP blocked** (datacenter IP flagged) — YouTube returns 429/CAPTCHA/timeout
+   - Fix: Use **residential proxy** with `youtube-transcript-api`
+   - `python3 /path/to/venv/bin/python3 -c "from youtube_transcript_api import YouTubeTranscriptApi; print(YouTubeTranscriptApi.get_transcript('ID', proxies={'http':'http://user:pass@host:port','https':'http://user:pass@host:port'}))"`
+
+2. **Video has no subtitles** (YouTube shows "Subtitles/closed captions unavailable")
+   - Fix: **No server-side fix possible** — this is a video-level limitation
+   - Workaround: Use **ASR/speech-to-text API** (AssemblyAI, Speechmatics, Rev.com)
+     - Download audio via `yt-dlp -x --audio-format mp3 URL`
+     - Send audio file to ASR API
+     - Cost: ~$0.02/min (AssemblyAI) to ~$1.50/min (Rev.com human)
 
 For related videos, check the video rows in the sidebar (`#related` or `ytd-watch-next-secondary-results`). Their titles often reveal what topics the main video covers.
