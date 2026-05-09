@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [Coding-Agent, Claude, Anthropic, Code-Review, Refactoring, PTY, Automation]
-    related_skills: [codex, hermes-agent, opencode]
+    related_skills: [codex, hermes-agent, opencode, agent-skills]
 ---
 
 # Claude Code — Hermes Orchestration Guide
@@ -536,17 +536,88 @@ Claude Code auto-loads `CLAUDE.md` from the project root. Use it to persist proj
 
 **Be specific.** Instead of "Write good code", use "Use 2-space indentation for JS" or "Name test files with `.test.ts` suffix." Specific instructions save correction cycles.
 
-### Rules Directory (Modular CLAUDE.md)
+#### Rules Directory (Modular CLAUDE.md)
 For projects with many rules, use the rules directory instead of one massive CLAUDE.md:
 - **Project rules:** `.claude/rules/*.md` — team-shared, git-tracked
 - **User rules:** `~/.claude/rules/*.md` — personal, global
 
 Each `.md` file in the rules directory is loaded as additional context. This is cleaner than cramming everything into a single CLAUDE.md.
 
+### AGENTS.md — Agent Team Definition
+Located at `./AGENTS.md` or `~/.claude/AGENTS.md`. Defines multiple subagents and their collaboration pattern for complex multi-agent workflows.
+
+### The `.claude` Directory — Full Structure (Official)
+
+```
+Project/
+├── CLAUDE.md                        # Project context (auto-loaded)
+├── AGENTS.md                        # Multi-agent team definition
+├── .mcp.json                        # MCP server configuration
+├── .worktreeinclude                 # Worktree include paths
+└── .claude/
+    ├── settings.json                # Project settings (git-tracked)
+    ├── settings.local.json          # Local overrides (gitignored)
+    ├── rules/                       # Modular rules (*.md, loaded with CLAUDE.md)
+    │   ├── testing.md
+    │   └── api-design.md
+    ├── skills/                      # Auto-triggered skills
+    │   └── <skill-name>/
+    │       ├── SKILL.md            # Skill definition with trigger + steps
+    │       └── *.md                # Supporting files (checklists, references)
+    ├── commands/                    # Manual slash commands (/name)
+    │   └── <command>.md
+    ├── agents/                      # Named subagents (@mention)
+    │   └── <agent>.md
+    ├── output-styles/               # Output format definitions
+    │   └── <style>.md
+    └── agent-memory/               # Per-agent persistent memory
+        └── <agent-name>/
+            └── MEMORY.md
+
+~/.claude/                          # Global/user-level (applies to all projects)
+├── CLAUDE.md                        # Global context
+├── AGENTS.md                        # Global agent teams
+├── settings.json                    # Global settings
+├── commands/*.md                    # Global slash commands
+├── agents/*.md                      # Global subagents
+├── rules/*.md                       # Global rules
+├── skills/                          # Global skills
+└── projects/<hash>/memory/         # Auto-memory storage (25KB/project limit)
+```
+
+### CLAUDE.md Loading Priority (lowest → highest)
+Files load in order; later entries override earlier ones:
+1. `~/.claude/CLAUDE.md` — global fallback
+2. `./CLAUDE.md` — project-specific
+3. `.claude/rules/*.md` — modular rules (loaded alongside CLAUDE.md)
+4. `.claude/CLAUDE.local.md` — local overrides (gitignored, highest priority)
+
+### Skill vs Command vs Subagent — When to Use Which
+
+| Mechanism | Invocation | Trigger | Use when |
+|----------|-----------|---------|----------|
+| **Skill** | Automatic | Natural language match | Repeated workflows Claude should auto-detect |
+| **Command** | Manual | `/command-name` | Named procedures user explicitly requests |
+| **Subagent** | Explicit | `@agent-name` | Specialized experts invoked for specific tasks |
+
+- **Skills** (`.claude/skills/<name>/SKILL.md`): Claude reads the `trigger` condition and auto-invokes when the task matches. No manual invocation needed.
+- **Commands** (`.claude/commands/<name>.md`): User types `/name` explicitly. Good for procedures with arguments (`$ARGUMENTS`).
+- **Subagents** (`.claude/agents/<name>.md`): User or parent agent @mentions the agent. Good for dedicated specialists (code-reviewer, security-auditor).
+
+### Official Documentation Sources
+- [Explore the .claude directory](https://code.claude.com/docs/en/claude-directory)
+- [How Claude remembers your project](https://code.claude.com/docs/en/memory)
+- [Build with Claude Code — Subagents](https://code.claude.com/docs/en/sub-agents)
+
 ### Auto-Memory
 Claude automatically stores learned project context in `~/.claude/projects/<project>/memory/`.
 - **Limit:** 25KB or 200 lines per project
 - This is separate from CLAUDE.md — it's Claude's own notes about the project, accumulated across sessions
+
+## References
+
+- `references/claude-directory.md` — Full official reference on `.claude/` directory structure: CLAUDE.md locations/loading-order, rules/, skills/, subagents/, auto memory, claudeMdExcludes.
+- **For skills creation, installation, and ecosystem (Agent Skills spec, skills.sh, Anthropic library, best practices):** use the `agent-skills` skill instead — it covers the full class in depth.
 
 ## Custom Subagents
 

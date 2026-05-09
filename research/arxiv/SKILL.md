@@ -245,6 +245,15 @@ curl -s "https://api.semanticscholar.org/graph/v1/author/search?query=Yann+LeCun
 1. **Discover**: `python scripts/search_arxiv.py "your topic" --sort date --max 10`
 2. **Assess impact**: `curl -s "https://api.semanticscholar.org/graph/v1/paper/arXiv:ID?fields=citationCount,influentialCitationCount"`
 3. **Read abstract**: `web_extract(urls=["https://arxiv.org/abs/ID"])`
+
+**Agent/AI tech research tip**: For searching agent-related papers, prefer `ti:` (title) search over `all:` — the API `all:` field returns noisy results. Also, batch-fetch known IDs directly rather than hoping search hits them:
+
+```bash
+# Instead of hoping search finds key papers, fetch by known ID
+for id in "2308.00352" "2303.17580" "2308.03688" "2303.17760"; do
+  curl -s "https://export.arxiv.org/api/query?id_list=$id" | python3 -c "..."
+done
+```
 4. **Read full paper**: `web_extract(urls=["https://arxiv.org/pdf/ID"])`
 5. **Find related work**: `curl -s "https://api.semanticscholar.org/graph/v1/paper/arXiv:ID/references?fields=title,citationCount&limit=20"`
 6. **Get recommendations**: POST to Semantic Scholar recommendations endpoint

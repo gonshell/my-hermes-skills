@@ -135,6 +135,65 @@ Pick the closest existing category. Don't invent new top-level categories casual
 - **Adding supporting files:** `write_file` to `skills/<category>/<name>/references/<file>.md`, `templates/<file>`, or `scripts/<file>`. `skill_manage(action='write_file')` also works and enforces the references/templates/scripts/assets subdir allowlist.
 - **Always commit** the edit — in-repo skills are source, not runtime state.
 
+## Structuring Technical Concept Documents
+
+When writing a skill that explains a technical concept (not just a how-to), the structure must answer the reader's actual questions, not follow a generic What/Why/How template blindly.
+
+### The Problem → What → How Pattern
+
+Every technical concept exists to solve a problem. Structure each section as:
+
+```
+1. Problem (面临什么问题)
+   — What pain does this technology solve? Why did it need to exist?
+   — Frame it from the DEVELOPER's perspective, not the technology's.
+
+2. What (是什么)
+   — Concrete, runnable examples: actual JSON output, actual config, actual file tree.
+   — NOT generic description. Developers need to recognize what they will see/use.
+
+3. How (怎么做)
+   — Minimal working example + workflow steps.
+   — Include: directory structure if applicable, commands to run, pitfalls.
+```
+
+### Why This Order Matters
+
+Leading with "What is X" forces the reader to hold a definition they can't yet appreciate. Leading with "Problem" gives them a reason to care before seeing the solution.
+
+### Common Structural Mistakes
+
+| Mistake | Why it's wrong |
+|---------|----------------|
+| All chapters follow What → Why → How identically | Assumes every concept needs the same structure; flattens the narrative |
+| "Trends" section appended at the end | Destroys the structure. Embed trends inside each chapter, not as a separate block |
+| Multiple levels of hierarchy (file-per-chapter) for a single concept | Over-fragmentation. One file, sequential chapters, is clearer for a coherent topic |
+| Describing without showing concrete examples | "LLM outputs JSON" vs actual `{function: "get_weather", arguments: {...}}` |
+
+### Before Writing: Ask These Questions Per Chapter
+
+- Who is reading this? (Developer who needs to USE this, not researcher who needs to UNDERSTAND it deeply)
+- What is the ONE thing they should take away?
+- What would they Google if this section was missing?
+- Do the section headings answer real questions, or just label topics?
+
+### Document-Level Structure (Single File)
+
+For a document covering multiple related concepts:
+
+```
+# Title
+
+## 架构总览图  ← top-level overview first, so readers have a mental map
+
+## Chapter 1
+## Chapter 2
+## ...
+## 全链路示例  ← tie it together with a concrete end-to-end walkthrough
+```
+
+One file. Sequential chapters. No separate "趋势" chapter — embed it in each section.
+
 ## Common Pitfalls
 
 1. **Using `skill_manage(action='create')` for an in-repo skill.** It writes to `~/.hermes/skills/`, not the repo tree. Use `write_file` for in-repo creation.

@@ -310,6 +310,17 @@ Type these during an interactive chat session.
 
 ## Key Paths & Config
 
+> ⚠️ **Env trap**: When Hermes runs via cron/scheduler, `$HOME` resolves to `/Users/xiesg/.hermes/home`, not `/Users/xiesg`. Scripts referencing `~/.hermes/` will break. Always use `HOME=/Users/xiesg` prefix, or use absolute paths. See `references/hermes-home-env.md` for details.
+
+### Enterprise / Commercial Options
+
+Hermes Agent is fully open source (MIT). No commercial/enterprise tier exists on-device. For organizational use requiring SLAs, SSO, team RBAC, or support contracts:
+
+- **Contact Nous Research** directly: https://nousresearch.com
+- **Wegent (wecode.ai)** is a related open-source multi-agent platform with enterprise ambitions — see `references/enterprise-landscape.md` for a competitive landscape covering both self-hosted and commercial alternatives (Claude Code Team, Codex Enterprise, Wegent).
+
+
+
 ```
 ~/.hermes/config.yaml       Main configuration
 ~/.hermes/.env              API keys and secrets

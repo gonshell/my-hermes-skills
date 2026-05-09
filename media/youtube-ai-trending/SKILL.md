@@ -26,11 +26,16 @@ triggers:
 - 按播放量排序
 
 ### 3. 当日新发热门视频
-- **长视频 TOP 5**：从搜索结果页「最近アップロードされた動画」tab 按播放量排序
-- **短视频 TOP 3**：从搜索结果「すべて」标签提取含 `/shorts/` 链接的视频
-- 参考搜索页（同时包含长视频+Shorts混合流）：`https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude`
+**实际做法**：使用同一最热门长视频搜索页（`sp=CAE%253D`），通过 JS 提取后**按发布时间过滤**（如 "7小时前"、"19小时前"），无需切换 tab 或重新加载页面。YouTube 的搜索结果默认混合了热门和较新视频，7小时内上传的视频也会出现在其中。
 
-**注意**：直接访问 `@AIDailyBrief/videos` 频道页时，`ytd-video-renderer` 的 `titleEl.href` 可能返回空字符串（链接丢失），导致提取的URL全部为空。推荐改用搜索结果页的「最近アップロードされた動画」tab（ref=e15）来获取最新上传视频，提取JS与长视频提取相同。
+- **长视频 TOP 5**：从最热门搜索结果中过滤发布时间在24小时内的视频，按播放量排序
+- **短视频 TOP 3**：从混合搜索页「すべて」标签过滤 `/shorts/` 链接，按播放量排序
+- 参考搜索页：`https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude&sp=CAE%253D`
+
+**注意**：
+- `sp=CAI%253D`（按最新排序）在浏览器中**无法通过 URL 直接访问**，会停留在默认排序，无法作为备选
+- 直接访问 `@AIDailyBrief/videos` 频道页时，`titleEl.href` 返回空字符串（链接丢失），不要使用频道页提取新上传视频
+- 推荐做法：对最热门搜索页的 JS 提取结果按 `metadata` 中的时间字符串（如 "7小时前"）筛选即可获得新发布视频
 
 ## 搜索URL模板
 
@@ -38,12 +43,13 @@ triggers:
 # 最热门长视频（本周上传）
 https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude&sp=CAE%253D
 
-# 最热门短视频
-https://www.youtube.com/results?search_query=AI+OR+artificial+intelligence
-
-# AI Daily Brief频道（最新视频）
-https://www.youtube.com/@AIDailyBrief/videos
+# 最热门短视频（混合流，不过滤Shorts，同一页面提取长+短）
+https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude
 ```
+
+**⚠️ 已失效的 URL（不要使用）：**
+- `sp=CAI%253D`（按最新排序）— 无法通过 URL 直接访问，会停留在默认热门排序
+- `@AIDailyBrief/videos` 频道页 — `titleEl.href` 返回空字符串，导致所有 watch URL 丢失
 
 ## 输出格式
 
@@ -242,3 +248,8 @@ https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
 # 直接获取最新一期AI早报
 https://www.bilibili.com/video/BV1BLoSByEoU/  (2026-04-25期)
 ```
+
+## 飞书推送工作流
+
+定时任务场景下，将数据写入飞书文档并发送通知的完整流程见：
+[`references/youtube-ai-trending-feishu-workflow.md`](references/youtube-ai-trending-feishu-workflow.md)

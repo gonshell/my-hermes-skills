@@ -112,28 +112,33 @@ The exit IP (e.g., `185.152.67.176`) is a **datacenter/cloud IP**. YouTube block
 
 ## Error Handling
 
-- **Transcript disabled**: tell the user; suggest they check if subtitles are available on the video page.
+- **"Subtitles/closed captions unavailable" shown on video page**: This means the video has NO subtitles uploaded — not a transient failure. Server-side transcript tools will also fail. Reconstruct content from the **description chapter timestamps + source URLs** (see Step 1 above). This is actually a reliable way to get the video's full structure even without transcript. Also try: search for the video title + channel name — creators often republish the same content on their website or blog.
 - **Private/unavailable video**: relay the error and ask the user to verify the URL.
 - **No matching language**: retry without `--language` to fetch any available transcript, then note the actual language to the user.
 - **Dependency missing / script fails**: see Fallback Workflow below.
 - **Caption URL returns empty / 200 OK but no content**: This is the **IP-signature binding** issue — YouTube's `api/timedtext` URLs are signed with the requestor's IP and a timestamp. Server-side fetching from a different IP returns HTTP 200 with empty body. See Fallback Workflow Step 1 instead.
 - **pip not installed**: Cannot install `youtube-transcript-api`. Use `uv pip install` in Hermes uv venv.
-- **Browser also shows CAPTCHA / 429**: The browser shares the same datacenter exit IP as `terminal()`. Even the browser cannot bypass YouTube's block. Do NOT keep retrying — fall back to metadata inference immediately and suggest the user run locally.
+- **Browser also shows CAPTCHA / 429**: The browser shares the same datacenter exit IP as `terminal()`. Even the browser console cannot bypass YouTube's block if the exit IP is blocked. Do NOT keep retrying — fall back to metadata inference immediately and suggest the user run locally.
 - **IpBlocked / "datacenter IP"**: The server/Hermes exit IP is from a cloud/datacenter provider (e.g., `185.152.67.x`). YouTube aggressively blocks these. Fall back to metadata inference or have the user run locally on their residential IP.
 
 ---
 
 ## Fallback Workflow (When Transcript Extraction Fails)
 
-If the helper script fails (e.g., `youtube-transcript-api` not installed AND pip unavailable), fall back to this pipeline:
+If the helper script fails (timeout, IpBlocked, 429, CAPTCHA), fall back to this pipeline. Two distinct failure modes require different handling — see "Two Distinct Failure Modes" below.
 
 ### Step 1 — Get video metadata from the page
 
 Navigate to the YouTube video page and extract:
 - **Title** → overall topic
-- **Description** → key points, chapter markers (often `0:00`, `1:23` patterns)
+- **Description** → key points, chapter markers (often `0:00`, `1:23` patterns), and **SOURCE LINKS** to referenced articles — these are often clickable URLs confirming what the creator is discussing
 - **View count, upload date, channel** → credibility / scope hints
+- **Chapter timestamps in the description** → **the single best source when transcripts are unavailable**. Format is typically `[link text](0:00)` or plain `0:00 Topic`. Each chapter gives you a topic + timestamp + often a source URL. Reconstruct the full video structure from these.
 - **Related videos** sidebar → other videos by the same creator on the same topic → infer the video's likely structure
+
+> ⚠️ **Important — Why page HTML caption URLs don't work server-side:**
+> Even if you find a `baseUrl` in the page HTML for captions (e.g., `youtube.com/api/timedtext?v=...&signature=...`), fetching it from a server returns HTTP 200 with empty body. YouTube signs these URLs with the **requestor's IP** and an **expiry timestamp**. Server IPs differ from the browser's IP, so the signature validation fails silently.
+> If you have a browser session open AND the browser is using a residential IP, you CAN use the browser console to fetch captions. Otherwise, proceed with metadata inference.
 
 > ⚠️ **Important — Why page HTML caption URLs don't work server-side:**
 > Even if you find a `baseUrl` in the page HTML for captions (e.g., `youtube.com/api/timedtext?v=...&signature=...`), fetching it from a server will return HTTP 200 with empty body. YouTube signs these URLs with the **requestor's IP** and an **expiry timestamp**. Server IPs differ from the browser's IP, so the signature validation fails silently (YouTube returns empty HTML rather than an error).
@@ -201,8 +206,22 @@ YouTube transcript failures have **two different root causes**:
 2. **Video has no subtitles** (YouTube shows "Subtitles/closed captions unavailable")
    - Fix: **No server-side fix possible** — this is a video-level limitation
    - Workaround: Use **ASR/speech-to-text API** (AssemblyAI, Speechmatics, Rev.com)
-     - Download audio via `yt-dlp -x --audio-format mp3 URL`
+     - Download audio via `yt-dlp -x --audio-format mp3 URL` (or `-x --audio-format wav`)
      - Send audio file to ASR API
      - Cost: ~$0.02/min (AssemblyAI) to ~$1.50/min (Rev.com human)
+     - AssemblyAI example:
+       ```python
+       import subprocess
+       # 1. Download audio (yt-dlp from hermes venv)
+       subprocess.run(['/Users/xiesg/.hermes/hermes-agent/venv/bin/python3', '-m', 'pip', 'install', 'yt-dlp'])
+       subprocess.run(['yt-dlp', '-x', '--audio-format', 'mp3', '-o', '/tmp/audio.%(ext)s', URL])
+       # 2. Transcribe
+       subprocess.run(['/Users/xiesg/.hermes/hermes-agent/venv/bin/python3', '-m', 'pip', 'install', 'assemblyai'])
+       import assemblyai as aai
+       aai.settings.api_key = "YOUR_KEY"
+       transcript = aai.Transcriber().transcribe("/tmp/audio.mp3")
+       print(transcript.text)
+       ```
+   - **This is the only option that works for no-subtitle videos** when datacenter IP is blocked
 
 For related videos, check the video rows in the sidebar (`#related` or `ytd-watch-next-secondary-results`). Their titles often reveal what topics the main video covers.

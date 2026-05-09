@@ -66,6 +66,14 @@ metadata:
 | API 基础设施 | `m.weibo.cn` | `open-im.api.weibo.com` |
 
 ## 待确认
+## OpenClaw 与 wecode.ai 的关系
+
+`github.com/wecode-ai/openclaw-weibo` 是一个开源的微博 API 集成仓库（Apache-2.0），**不是商业产品品牌**。
+
+wecode.ai 的主要产品是 **Wegent**（https://github.com/wecode-ai/Wegent，Apache-2.0，553 stars）——一个"AI 原生操作系统"，用于编排多智能体团队。wecode.ai 有 Enterprise 页面（wecode.ai/enterprise），说明其有商业化意向。
+
+简单说：`openclaw-weibo` 是开源集成，`Wegent` 是 wecode.ai 的核心商业/开源产品。
+
 ## 待确认
 - 时间线（timeline）、评论（comments）、粉丝列表（followers）在 OpenClaw 中是否有对应端点（需读更多源码或提供真实 App ID/Secret 验证）
 - `app_id` + `app_secret` 的获取渠道：微博内部 Agent 平台使用，独立于开放平台 OAuth2
