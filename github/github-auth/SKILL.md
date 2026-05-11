@@ -241,6 +241,12 @@ fi
 | `remote: Permission to X denied` | Token may lack `repo` scope — regenerate with correct scopes |
 | `fatal: Authentication failed` | Cached credentials may be stale — run `git credential reject` then re-authenticate |
 | `ssh: connect to host github.com port 22: Connection refused` | Try SSH over HTTPS port: add `Host github.com` with `Port 443` and `Hostname ssh.github.com` to `~/.ssh/config` |
+| `internal error performing authentication` / `Could not read from remote repository` / `ssh-add -l` returns "The agent has no identities" | SSH key exists on disk but is not loaded into `ssh-agent`. Fix: `ssh-add ~/.ssh/id_ed25519` (or `ssh-add ~/.ssh/id_rsa`). If key is encrypted with a passphrase, use `SSH_ASKPASS` or `ssh-add ~/.ssh/id_ed25519` interactively. Verify with `ssh -T git@github.com` before retrying push. |
+| Push succeeds locally but fails in cron/scheduled job | Cron jobs run with a stripped environment — `ssh-agent` may not be running, HOME may differ from interactive shell (`HOME=/Users/xiesg/.hermes/home` vs `/Users/xiesg`). Use HTTPS token auth for cron jobs instead of SSH, or explicitly load keys before the job runs: `eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519`. |
 | Credentials not persisting | Check `git config --global credential.helper` — must be `store` or `cache` |
 | Multiple GitHub accounts | Use SSH with different keys per host alias in `~/.ssh/config`, or per-repo credential URLs |
 | `gh: command not found` + no sudo | Use git-only Method 1 above — no installation needed |
+
+## Reference Files
+
+- `references/ssh-agent-troubleshooting.md` — diagnosing and fixing SSH key not loaded into ssh-agent (common in cron/scheduled job environments where HOME differs from interactive shell)
