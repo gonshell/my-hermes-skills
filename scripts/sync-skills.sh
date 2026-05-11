@@ -52,8 +52,8 @@ build_sync_list() {
             echo "$s"
         done
     elif [[ "$MODE" == "all" ]]; then
-        # 同步全部
-        find "$SKILLS_DIR" -maxdepth 5 -name "SKILL.md" -type f | \
+        # 同步全部（-L 跟随符号链接，确保 .agents/skills/ 下的 lark-* symlink 被发现）
+        find -L "$SKILLS_DIR" -maxdepth 5 -name "SKILL.md" -type f | \
             while read f; do
                 rel="${f#$SKILLS_DIR/}"
                 echo "${rel%/*}"
@@ -84,7 +84,7 @@ sync_skill() {
     if [[ "$DRY_RUN" == "1" ]]; then
         echo "  [DRY] cp -r $src → $dst"
     else
-        rsync -a --exclude='.DS_Store' --exclude='*.log' \
+        rsync -a --copy-links --exclude='.DS_Store' --exclude='*.log' \
               --exclude='*.tmp' --exclude='__pycache__' \
               "$src/" "$dst/"
         echo "  ✓ $skill"
