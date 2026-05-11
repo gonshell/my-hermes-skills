@@ -54,25 +54,29 @@ score = 0.5 × log₁₀(播放量)/10
 - `标题`（title）
 
 ### 评分计算实现
-```javascript
-function calculateScore(video) {
-  // 播放量归一化（假设最大播放量1000万）
-  const maxViews = 10000000;
-  const logScore = Math.log10(video.views + 1) / Math.log10(maxViews);
+```python
+import math
+from datetime import datetime, timedelta
 
-  // 互动率得分
-  const likeRate = video.likes / video.views;
-  const interactionScore = Math.min(likeRate * 10, 1.0);
+NOW = datetime(2026, 5, 10)  # 在cron job中设置为当前时间
 
-  // 新鲜度得分（168小时=7天）
-  const hoursAgo = (Date.now() - new Date(video.pubDate).getTime()) / 3600000;
-  const freshnessScore = Math.max(1 - hoursAgo / 168, 0);
-
-  // 综合得分
-  const score = 0.5 * logScore + 0.35 * interactionScore + 0.15 * freshnessScore;
-  return score;
-}
+def calc_score(views, pub_date, current_date=NOW, max_views=10_000_000):
+    """
+    综合评分: 0.5 × log_views + 0.15 × freshness (+ 0.35 × 互动率, 通常=0)
+    无点赞数据时互动率为0。
+    新鲜度7天(168h)线性衰减至0。
+    """
+    if pub_date is None:
+        return 0
+    hours_old = (current_date - pub_date).total_seconds() / 3600
+    freshness = max(1 - hours_old / 168, 0)
+    log_score = math.log10(views + 1) / math.log10(max_views)
+    # Interaction = 0 when likes unavailable (B站搜索页不提供点赞数)
+    score = 0.5 * log_score + 0.15 * freshness
+    return score
 ```
+
+⚠️ **实际应用注意**：B站搜索页几乎不提供点赞数，互动率权重(0.35)实际上为0，真实公式为 `0.5×log + 0.15×freshness`。对于超过7天的历史视频（freshness=0），score几乎完全由播放量决定，因此长期热门内容（如月映万川_Boo的"全球六大顶级AI白嫖"合集，50万播放）会持续排在前列。
 
 ### 注意事项
 - B站搜索结果页面通常不直接显示点赞数，需要进入视频详情页获取
@@ -243,36 +247,67 @@ URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+Deep
 
 ## 🔧 关键发现与故障排除（2026年4月实测）
 
-### 1. duration=4 参数严重不可靠（重要！）
+### 1. duration=4 参数严重不可靠（重要！持续有效！）
 - **问题**：`duration=4`（3天内）在 browser 环境下几乎总是返回2025年甚至更老的视频
 - **原因**：B站搜索API的日期过滤在非登录态/headless环境下失效
+- **状态**：2026年5月实测仍完全失效，无改善迹象
 - **解决方案（实测有效）**：
-  1. 使用 `duration=1`（10分钟内）+ 在搜索词中包含年月：`DeepSeek 2026年4月` 或 `AI 2026 4月最新`
+  1. 使用 `duration=1`（10分钟内）+ 在搜索词中包含年月：`DeepSeek 2026年4月` 或 `AI 2026 5月`
   2. 使用 `order=pubdate&duration=1` 获取最新发布内容
   3. 在代码层面按实际日期过滤 freshness > 0（7天内）
   4. **最佳实践**：多次搜索组合——通用AI词+年月词 + 细分领域词+年月词
+- **⚠️ 重要约束**：即使使用上述方法，在每月中期运行时"3天内"窗口非常狭窄（可能只有1-2条视频），因为4月中旬的日期（04-10、04-12等）在5月10日已超7天新鲜度窗口。**建议将cron job安排在月初运行**，或适当扩大评分算法的新鲜度衰减周期以包含更多内容。
 
 ```bash
-# 实测有效的搜索URL模式
+# 实测有效的搜索URL模式（2026年5月仍有效）
+# 最新发布（按时间，最有效）
+https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20Claude%20Qwen%20Deepseek%202026%E5%B9%B4&order=pubdate&duration=1
+
+# 最热门（按播放量）
+https://search.bilibili.com/video?keyword=AI%20GPT%20Claude%20Qwen%20Deepseek%202026%E5%B9%B4&order=click&duration=1
+
+# 细分领域+年月（补充）
 https://search.bilibili.com/video?keyword=DeepSeek%20RAG%20Agent%202026%204%E6%9C%88&order=pubdate&duration=1
 https://search.bilibili.com/video?keyword=AI%202026%204%E6%9C%88%E6%9C%80%E6%96%B0&order=pubdate&duration=1
 ```
 
-### 2. 播放量 + 视频时长混合字段解析
-- **DOM格式**：`"1.4万 4 01:01"` 或 `"4245 32 01:41"` — 格式为「播放量 点赞数? 时长」
+### 2. 播放量 + 视频时长混合字段解析（2026年5月实测修正）
+- **DOM格式**：`"1.3万250932"` 或 `"4万70721"` — 播放量、点赞数、时长三者粘连！
+- **真实格式**：`"1.3万" + "25" + "09:32"` → 播放量=1.3万，时长=25:09:32
 - **解析规则**：
-  - 第一个空格前的内容 = 播放量（可能是 `1.4万` 或 `4245`）
-  - 最后一个 `HH:MM:SS` 或 `MM:SS` = 视频时长
-  - 点赞数通常在中间，数量较少时可能被省略
-- **正则提取**：
-  ```javascript
-  // 播放量：取第一段数字
-  var parts = text.split(' ');
-  var views = parts[0]; // "1.4万" 或 "4245"
-  
-  // 时长：匹配末尾的 HH:MM:SS 或 MM:SS
-  var durationMatch = text.match(/(\d+):(\d{2})(?::(\d{2}))?\s*$/);
+  - 第一个空格前 = 播放量（可能是 `1.4万` 或 `4245`）
+  - 时长格式为 `HHMMSS` 或 `MMDDSS`，没有分隔符直接拼接在播放量后面
+  - **⚠️ 必须用正则提取时长**：`/(\d{1,2}):(\d{2}):(\d{2})$/` 或 `/(\d{1,2}):(\d{2})$/`
+  - 时长如果出现 `25:09:32`（>24小时）或 `09:32`（分钟），说明是视频总时长
+- **python解析实现**：
+  ```python
+  def parse_views_and_duration(text):
+      """解析 '1.3万250932' → views=13000, duration='25:09:32'"""
+      if not text: return 0, ''
+      # 先匹配时长（倒序找 HH:MM:SS 或 MM:SS）
+      m = re.search(r'(\d{1,2}):(\d{2}):(\d{2})\s*$', text)   # HH:MM:SS
+      if m:
+          h, mn, s = int(m.group(1)), int(m.group(2)), int(m.group(3))
+          duration = f"{h}:{mn:02d}:{s:02d}"
+          num_part = text[:m.start()].strip()
+      else:
+          m2 = re.search(r'(\d{1,2}):(\d{2})\s*$', text)        # MM:SS
+          if m2:
+              mn, s = int(m2.group(1)), int(m2.group(2))
+              duration = f"{mn}:{s:02d}"
+              num_part = text[:m2.start()].strip()
+          else:
+              duration = ''
+              num_part = text.strip()
+      # 解析播放量
+      num_part = re.sub(r'[^\d.万]', '', num_part)
+      if '万' in num_part:
+          views = float(num_part.replace('万','')) * 10000
+      else:
+          views = int(num_part) if num_part.isdigit() else 0
+      return views, duration
   ```
+- **重要**：时长 > 24h 意味着B站视频时长格式为 `HH:MM:SS`（可能超过24小时）
 
 ### 3. 日期解析（相对日期 → 实际日期）
 Bilibili 搜索结果使用相对日期格式，必须转换：
@@ -344,3 +379,14 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
 - 滚动后 DOM 结构可能不变，但实际内容已懒加载
 - 每次滚动后重新执行提取脚本，确保捕获新加载的视频卡片
 - 建议滚动2-3次，每次等待页面响应
+
+## 📁 参考实现
+
+`references/bilibili_processor.py` — 完整的Python处理器，包含：
+- `parse_views_and_duration()`: 处理粘连的播放量+时长字段（`"1.3万250932"` → views + duration）
+- `parse_bilibili_date()`: 相对日期解析（昨天、前天、MM-DD、YYYY-MM-DD）
+- `parse_video_data()`: 批量处理原始数据，返回含评分/duration/是否短视频字段的结构化列表
+- `calc_score()`: 综合评分公式（播放量对数 + 新鲜度，无点赞数据时互动率为0）
+- `sort_and_classify()`: 按score降序，返回长视频/短视频分组
+
+推荐在 `execute_code` 中使用，browser_console 只负责提取原始文本。

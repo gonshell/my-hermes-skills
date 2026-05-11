@@ -194,11 +194,30 @@ For a document covering multiple related concepts:
 
 One file. Sequential chapters. No separate "趋势" chapter — embed it in each section.
 
+### Pre-Writing Phase: Confirm Structure First
+
+**Do NOT start writing until structure is confirmed.** This is the most common浪费 (waste) in document writing sessions.
+
+Before writing any chapter:
+1. Clarify the **problem** each chapter solves — who is reading it and what they take away
+2. Define **boundaries** — what is in this chapter, what is explicitly NOT in this chapter (especially when removing content like a whole chapter)
+3. Resolve **cross-references** — are terms consistent across chapters? Does Chapter N+1 depend on Chapter N being read first?
+4. Verify **facts that affect structure** — protocol specs, version numbers, attribution — before committing to them in writing
+
+**Signals you need to stop and re-confirm structure:**
+- User says "去掉 X 的内容" → confirm if the removal creates a gap, or if remaining chapters need renumbering
+- Discovered a fact that contradicts what was already drafted → stop, correct the plan, then rewrite
+- Chapter boundaries are fuzzy → draw the line explicitly before writing
+
+This applies to both single-chapter additions and full-document creation. The cost of rewriting a paragraph is low; the cost of rewriting a chapter because structure was wrong is high.
+
 ## Common Pitfalls
 
 1. **Using `skill_manage(action='create')` for an in-repo skill.** It writes to `~/.hermes/skills/`, not the repo tree. Use `write_file` for in-repo creation.
 
-2. **Leading whitespace before `---`.** The validator checks `content.startswith("---")`; any leading blank line or BOM fails validation.
+2. **Writing protocol/project attribution from memory.** If the document covers a specific open-source project or standard (e.g. A2A, MCP, etc.), verify the actual origin/maintainer before writing. "Anthropic推出 A2A" vs "Google开发→Linux Foundation托管" is a fact-level error that invalidates the document. When in doubt, check the official spec page (e.g. a2a-protocol.org, modelcontextprotocol.io/specification).
+
+3. **Leading whitespace before `---`.** The validator checks `content.startswith("---")`; any leading blank line or BOM fails validation.
 
 3. **Description too generic.** Peer descriptions start with "Use when ..." and describe the *trigger class*, not the one task. "Use when debugging X" > "Debug X".
 

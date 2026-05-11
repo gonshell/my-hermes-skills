@@ -62,6 +62,10 @@ lark-cli docs +fetch --api-version v2 --doc "已有文档token"
 lark-cli auth login --as user
 ```
 
+## 参考
+
+- [`references/transfer-owner.md`](references/transfer-owner.md) — `drive permission.members transfer_owner` 的正确调用方式（--params JSON 包装 vs --type flag 踩坑）
+
 ## 常见错误对照
 
 | 错误信息 | 原因 | 解决方案 |

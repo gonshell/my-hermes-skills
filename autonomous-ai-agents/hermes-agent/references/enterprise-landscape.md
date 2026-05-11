@@ -43,11 +43,15 @@ Research notes from investigating commercial and enterprise-facing AI agent solu
 
 ---
 
-## Open Claw
+## Open Claw (wecode.ai)
 
-**GitHub:** https://github.com/wecode-ai/openclaw-weibo (Apache-2.0, 36 stars)
+**GitHub**: https://github.com/openclaw/openclaw (370k stars — major open-source project)
+**License**: Apache-2.0 (per openclaw org repos)
+**定位**: "Any OS. Any Platform." AI assistant OS using SOUL.md to define agent souls. TypeScript.
 
-Not a standalone commercial product. The `openclaw-weibo` repo is a Weibo API integration. No separate Open Claw enterprise brand found.
+> **Attribution note**: OpenClaw and Hermes Agent share an ecosystem and some contributors, but OpenClaw is an independent project under the `openclaw` GitHub org (not to be confused with the `wecode-ai` org's weibo-specific repo). The wecode.ai site is the commercial entity offering OpenClaw-based services.
+
+**Competitive position vs Hermes**: Both are agent runtime platforms (not orchestration frameworks like LangGraph/CrewAI). Hermes is Python with multi-platform messaging gateway; OpenClaw is TypeScript with a skill marketplace (5,400+ skills). They are complementary — OpenClaw skills are compatible with Hermes's skill system.
 
 ---
 

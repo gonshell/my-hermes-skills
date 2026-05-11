@@ -568,6 +568,54 @@ Provide:
 - Made the voice more personal and less "assembled" (varied rhythm, fewer placeholders)
 
 
+## Technical Writing: Beyond Surface De-AI-ing
+
+Removing AI voice patterns is the starting line, not the finish line. Surface-level humanization (stripping signposting, varying sentence length) doesn't guarantee useful technical writing. This section captures lessons from writing technical explanations that actually teach.
+
+### The two-dimensional failure mode
+
+Technical writing can fail in two independent dimensions:
+
+1. **Voice dimension** (what the 29 patterns address): sounds like a chatbot, not a human
+2. **Depth dimension** (what this section addresses): sounds fluent but teaches nothing
+
+A piece can pass the voice audit and still be useless. Both dimensions must be addressed.
+
+### Depth dimension: what typically goes missing
+
+**Mechanism not explained.** "The system parses the JSON" is not an explanation. What actually happens? Does it use regex? A specific message format? Is the LLM output wrapped in a special token? Who does the parsing — the SDK, the runtime, a middleware?
+
+**Dependencies not traced.** When A depends on B which depends on C, readers are left guessing how the chain works. Spell out the actual call sequence.
+
+**Trade-offs omitted.** Real technical decisions involve trade-offs. "MCP is a standard protocol" is a description, not a decision aid. What do you give up by using it vs. direct API calls? What are the latency implications? The operational complexity costs?
+
+**No failure modes.** Good technical writing names what can go wrong and why. Bad technical writing pretends everything works as described.
+
+**Key path not traced.** For any feature, there is a "key path" — the minimum set of steps that must happen for it to work. This path must be traceable end-to-end in the writing.
+
+### Session lessons (from writing AI Agent concepts doc)
+
+Lesson 1: When a user says "还是一般般" after a humanize pass, the problem may be depth, not voice. Check whether each technical section explains the mechanism, not just the concept name.
+
+Lesson 2: Technical comparison tables ("A2A vs ACP") are often AI-generated summaries that don't help a developer decide. Better to write: "Use A2A if you're already in the Claude ecosystem and want a protocol that pairs with MCP. Use ACP if you're platform-agnostic and willing to wait." A real judgment beats a balanced table.
+
+Lesson 3: Each section needs a "here's what you actually need to know" moment near the end — not as a formulaic "开发者该知道的" box, but as a genuine one-liner that captures the essential judgment call.
+
+Lesson 4: "Developer takeaways" should be specific, not generic. Not "Function Calling is not a silver bullet" but "if the user's request is vague ('I'm a bit tired'), Function Calling won't help — that's a prompt design problem."
+
+### How to audit technical depth
+
+After removing AI voice patterns, ask:
+1. Can a developer trace the key path of this feature end-to-end?
+2. Do I explain the mechanism, not just the concept name?
+3. Have I named the trade-offs, not just described the features?
+4. Have I said what can go wrong?
+5. Is there a clear judgment call a developer can make after reading this?
+
+If any answer is no, the depth dimension needs work. Varying sentence rhythm and removing filler words won't fix it.
+
+---
+
 ## Attribution
 
 This skill is ported from [blader/humanizer](https://github.com/blader/humanizer) (MIT licensed), which is itself based on [Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), maintained by WikiProject AI Cleanup. The patterns documented there come from observations of thousands of instances of AI-generated text on Wikipedia.

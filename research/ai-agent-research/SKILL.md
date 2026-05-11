@@ -175,6 +175,7 @@ When producing a technology stack report, use this structure:
 ## Key Papers Reference
 
 - `references/key-papers-2026.md` — Detailed summaries of foundational + 2025-2026 frontier papers (RAO, SkillOS, StraTA, MASPO, AI CFD Scientist, Superintelligent Retrieval Agent, Cited-but-Not-Verified, AI Co-Mathematician)
+- `references/protocol-sources.md` — Authoritative sources for MCP, A2A, ACP, Function Calling, Skills protocols. Includes verification checklist to avoid misattribution (e.g. A2A belongs to a2aproject org, not Anthropic).
 
 ## Key Research Frontiers (2025-2026)
 

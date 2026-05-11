@@ -12,8 +12,8 @@
 set -euo pipefail
 
 # ---------- 配置 ----------
-SKILLS_DIR="$HOME/.hermes/skills"
-GIT_DIR="$HOME/github/my-hermes-skills"
+SKILLS_DIR="/Users/xiesg/.hermes/skills"
+GIT_DIR="/Users/xiesg/github/my-hermes-skills"
 
 # 需要同步的 skills（为空则同步全部）
 # 留空表示同步所有 skills
