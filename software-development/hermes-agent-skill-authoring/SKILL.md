@@ -19,7 +19,13 @@ There are two places a SKILL.md can live:
 1. **User-local:** `~/.hermes/skills/<maybe-category>/<name>/SKILL.md` — personal, not shared. Created via `skill_manage(action='create')`.
 2. **In-repo (this skill is about this case):** `/home/bb/hermes-agent/skills/<category>/<name>/SKILL.md` — committed, shipped with the package. Use `write_file` + `git add`. `skill_manage(action='create')` does NOT target this tree.
 
-## When to Use
+## Supporting Files
+
+Reference files live under `references/`, `templates/`, or `scripts/` in the skill directory. Add a one-line pointer so future agents can find them:
+
+- `references/skill-discovery-symlinks.md` — Directory structure conventions for `~/.hermes/skills/`, the symlink mount pattern (`lark-*` pointing to `.agents/skills/`), and the `find -L` / `rsync --copy-links` fix for sync scripts.
+
+## Common Pitfalls
 
 - User asks you to add a skill "in this branch / repo / commit"
 - You're committing a reusable workflow that should ship with hermes-agent

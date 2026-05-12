@@ -15,7 +15,7 @@
 ## 步骤 1：写入飞书文档
 
 ### 目标文档
-- 文档 token：`TBEddfdvQogBTxx9HArceKmlnYd`
+- 文档 token：`TBEddfdvQogBTxx9HArceKmlnYd`（无空格）
 - 文档标题：《每日AI热门视频推送》
 
 ### 写入命令
@@ -35,25 +35,35 @@ rm -f ./ai_trending_content.xml /tmp/ai_trending_content.xml
 
 ### XML 内容模板
 
-日期标题用 `<h1>`，各区块用 `<h2>`，视频条目用 `<p>` + `<br/>` 换行，URL 直接裸写在文本中（不要用 Markdown 链接格式，飞书表格中无法点击）：
+日期标题用 `<h1>`，各区块用 `<h2>`，视频条目用 `<ol><li>` 列表结构（不要用多个 `<p><br/>` 堆砌），URL 裸写在文本中：
 
 ```xml
 <h1>YYYY-MM-DD 06:00</h1>
 
 <h2>📊 一、最热门长视频 TOP 10</h2>
 
-<p>1. 视频标题<br/>
-   播放量：XXX · 发布时间 · 频道名<br/>
-   https://youtube.com/watch?v=VIDEO_ID</p>
+<ol><li seq="auto"><p><b>视频标题</b></p><p>播放量：XXX | 发布时间 | 频道名</p><p><a href="https://youtube.com/watch?v=VIDEO_ID">https://youtube.com/watch?v=VIDEO_ID</a></p></li>...</ol>
 
-<p>2. ...（同上格式）</p>
-...
+<h2>📊 二、最热门短视频 TOP 5</h2>
+
+<ol><li seq="auto"><p><b>视频标题</b></p><p>播放量：XXX | 发布时间</p><p><a href="https://youtube.com/shorts/VIDEO_ID">https://youtube.com/shorts/VIDEO_ID</a></p></li>...</ol>
+
+<h2>📊 三、当天新发热门视频</h2>
+
+<h3>长视频 TOP 5</h3>
+<ol>...</ol>
+
+<h3>短视频 TOP 3</h3>
+<ol>...</ol>
+
+<p>📝 摘要说明：当前热门主题分析...</p>
 ```
 
 **⚠️ 注意事项：**
 - `--content @./filename` 中的路径**必须是相对路径**，不能用 `/tmp/xxx` 绝对路径，否则报错 `--file must be a relative path within the current directory`
-- 链接用纯文本格式，不要 Markdown 链接语法（`[text](url)` 在飞书表格中渲染为纯文本，无法点击）
+- 链接用纯文本或 `<a href>` 格式，不要 Markdown 链接语法（`[text](url)` 在飞书表格中渲染为纯文本，无法点击）
 - `&` 在 XML 内容中需要转义为 `&amp;`
+- `<ol>` 配合 `seq="auto"` 自动编号，条目多时比手写序号更健壮
 
 ---
 
@@ -67,10 +77,10 @@ lark-cli im chats list --page-all
 
 ### 发送文本消息
 ```bash
+# 推荐：使用 --text 短格式（自动包装为 {"text":"..."}，无需手写 JSON）
 lark-cli im +messages-send \
-  --chat-id "oc_xxx" \
-  --msg-type text \
-  --content '{"text":"📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 YYYY-MM-DD 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd"}'
+  --chat-id "oc_110e535468b6ffbf7a978eb95b1cd51f" \
+  --text $'📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 YYYY-MM-DD 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd'
 ```
 
 ---
@@ -78,19 +88,20 @@ lark-cli im +messages-send \
 ## 完整脚本（供参考）
 
 ```bash
+DOC_TOKEN="TBEddfdvQogBTxx9HArceKmlnYd"
+CHAT_ID="oc_110e535468b6ffbf7a978eb95b1cd51f"
+DATE_STR=$(date '+%Y-%m-%d')
+
 # 写入文档
-cp /tmp/content.xml ./ai_trending_content.xml
 lark-cli docs +update --api-version v2 \
-  --doc "TBEddfdvQogBTxx9HArceKmlnYd" \
+  --doc "$DOC_TOKEN" \
   --command append \
   --content @./ai_trending_content.xml
-rm -f ./ai_trending_content.xml
 
-# 发送通知（群ID固定）
+# 发送通知（使用 --text 短格式，无需手写 JSON）
 lark-cli im +messages-send \
-  --chat-id "oc_110e535468b6ffbf7a978eb95b1cd51f" \
-  --msg-type text \
-  --content '{"text":"📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 2026-05-09 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd"}'
+  --chat-id "$CHAT_ID" \
+  --text $'📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 '"$DATE_STR"' 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/'"$DOC_TOKEN"
 ```
 
 ---

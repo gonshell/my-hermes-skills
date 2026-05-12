@@ -49,7 +49,17 @@ https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR
 
 **⚠️ 已失效的 URL（不要使用）：**
 - `sp=CAI%253D`（按最新排序）— 无法通过 URL 直接访问，会停留在默认热门排序
-- `@AIDailyBrief/videos` 频道页 — `titleEl.href` 返回空字符串，导致所有 watch URL 丢失
+- `@AIDailyBrief/videos` 频道页 — `titleEl.href` 返回空字符串，导致所有 watch URL 全部丢失
+
+**JS 过滤长视频的正确写法（重要）：**
+从混合搜索页同时提取长视频+短视频时，必须用 `!isShort` 布尔标志过滤，不能只依赖 `!link.includes('/shorts/')`：
+```javascript
+// 错误 ❌ — 可能在某些YouTube变体下误判
+.filter(v => v.title && v.link && !v.link.includes('/shorts/'))
+
+// 正确 ✅ — 使用明确的 isShort 标志
+.filter(v => v.title && v.link && !v.isShort)
+```
 
 ## 输出格式
 
@@ -98,17 +108,18 @@ https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR
 
 **推荐方法：使用 `browser_console` 执行 JavaScript 提取**
 
-长视频数据提取：
+长视频数据提取（同时产出 isShort 标志，供后续过滤复用）：
 ```javascript
 Array.from(document.querySelectorAll('ytd-video-renderer')).slice(0, 20).map((v, i) => {
   const titleEl = v.querySelector('#video-title');
   const title = titleEl?.textContent?.trim() || '';
   const link = titleEl?.href || '';
+  const isShort = link.includes('/shorts/');
   const spans = v.querySelectorAll('#metadata-line span');
   const metadata = Array.from(spans).map(s => s.textContent).join(' · ');
   const channel = v.querySelector('#channel-name a')?.textContent?.trim() || '';
-  return {i, title, link, metadata, channel};
-}).filter(v => v.title && v.link)
+  return {i, title, link, isShort, metadata, channel};
+}).filter(v => v.title && v.link && !v.isShort)  // 过滤掉短视频
 ```
 
 短视频数据提取：
