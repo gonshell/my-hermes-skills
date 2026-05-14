@@ -158,12 +158,32 @@ Array.from(document.querySelectorAll('ytd-video-renderer'))
 
 **已验证可用的备选方案（按可靠性排序）**：
 
-1. **从搜索结果「すべて」标签过滤 Shorts（推荐，最高效）** ✅
-   - 使用主搜索结果页（不过滤Shorts）提取所有 `ytd-video-renderer`
-   - 过滤出 `/shorts/` 链接的视频，一趟搞定长视频+短视频
-   - 提取JS见上方「短视频数据提取」部分
+1. **搜索结果页「ショート」tab（最可靠）** ✅
+   - 点击页面内 tab 区域的「ショート」tab（ref=e11 附近），而不是顶部导航的「ショート」链接
+   - 点击后会加载 Shorts 内容，仍使用 `ytd-video-renderer` 渲染，可正常提取
+   - 提取JS：
+```javascript
+Array.from(document.querySelectorAll('ytd-video-renderer'))
+  .map(v => {
+    const titleEl = v.querySelector('#video-title');
+    const link = titleEl?.href || '';
+    const isShort = link.includes('/shorts/');
+    return {
+      title: titleEl?.textContent?.trim() || '',
+      link,
+      isShort,
+      metadata: Array.from(v.querySelectorAll('#metadata-line span')).map(s => s.textContent).join(' · ')
+    };
+  })
+  .filter(v => v.title && v.isShort)
+  .slice(0, 10)
+```
 
-2. **搜索结果页「ショート」tab（次选）** ✅
+2. **从搜索结果「すべて」标签过滤 Shorts（次选，可能为空）** ⚠️
+   - 使用主搜索结果页（不过滤Shorts）提取所有 `ytd-video-renderer`
+   - 过滤出 `/shorts/` 链接的视频
+   - **已知问题（2026年5月亲测）**：有时「すべて」页面的 `ytd-video-renderer` 元素中完全不包含 `/shorts/` 链接，导致过滤结果为空。此时必须回退到方案1（点击 Shorts tab）
+   - 如果此方案返回非空结果，则一趟搞定长视频+短视频最高效
    - 点击页面内 tab 区域的「ショート」tab（ref=e11），而不是顶部导航的「ショート」链接
    - 点击后会加载 Shorts 内容，仍使用 `ytd-video-renderer` 渲染，可正常提取
    - 提取JS：
@@ -184,7 +204,12 @@ Array.from(document.querySelectorAll('ytd-video-renderer'))
   .slice(0, 10)
 ```
 
-3. **Shorts 页面备选方案**（数据质量较低）：
+3. **从搜索结果「すべて」标签过滤 Shorts（已不可靠）** ⚠️
+   - 使用主搜索结果页提取所有 `ytd-video-renderer`，过滤 `/shorts/` 链接
+   - **2026年5月实测**：热门排序页（`sp=CAE%253D`）和默认排序页均可能返回 0 条 shorts。YouTube 可能已调整搜索结果渲染逻辑
+   - 提取JS见上方「短视频数据提取」部分，但务必准备回退到方案1
+
+4. **Shorts 页面备选方案**（数据质量较低）：
    - 滚动触发懒加载后，使用 `a[href*="/shorts/"]` 提取链接
    - 标题只能依赖 DOM 中可见文本或截断显示，无法获取完整标题
    - 备选JS：

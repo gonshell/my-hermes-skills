@@ -20,9 +20,8 @@
 
 ### 写入命令
 ```bash
-# 1. 将 XML 内容写入当前目录下的文件（lark-cli 要求相对路径）
-cp /tmp/ai_trending_content.xml ./ai_trending_content.xml
-
+# 1. 使用 write_file 直接写入当前目录（lark-cli 要求相对路径）
+#    内容为完整 XML 字符串（已在 skill 输出格式中定义）
 # 2. 使用 append 指令追加
 lark-cli docs +update --api-version v2 \
   --doc "TBEddfdvQogBTxx9HArceKmlnYd" \
@@ -30,8 +29,10 @@ lark-cli docs +update --api-version v2 \
   --content @./ai_trending_content.xml
 
 # 3. 清理临时文件
-rm -f ./ai_trending_content.xml /tmp/ai_trending_content.xml
+rm -f ./ai_trending_content.xml
 ```
+
+**⚠️ `write_file` 路径规则**：写入时必须用相对路径 `./ai_trending_content.xml`，不能用 `/tmp/ai_trending_content.xml`，否则 lark-cli 报错 `--file must be a relative path within the current directory`。用 `write_file` 直接写到当前目录即可，无需经过 `/tmp/` 中转。
 
 ### XML 内容模板
 
@@ -70,17 +71,34 @@ rm -f ./ai_trending_content.xml /tmp/ai_trending_content.xml
 ## 步骤 2：发送飞书群通知
 
 ### 获取群 ID
+优先使用环境变量，无需额外读取文件或调用 API。
+
 ```bash
+# 方法1（推荐）：从环境变量直接获取
+# cron job 运行时 FEISHU_HOME_CHANNEL 自动设置为当前会话 chat_id
+echo $FEISHU_HOME_CHANNEL
+# 输出: oc_de41dc899cd2e0f9afad7dddb8fa1e89
+
+# 方法2：读取 cron jobs.json 获取 origin chat_id
+cat ~/.hermes/cron/jobs.json | python3 -c "
+import json,sys
+jobs = json.load(sys.stdin)['jobs']
+for j in jobs:
+    if 'AI' in j.get('name','') and '早' in j.get('name',''):
+        print(j['origin']['chat_id'])
+"
+
+# 方法3（备选）：列出所有群
 lark-cli im chats list --page-all
 ```
-从返回中找到目标群 `chat_id`（格式：`oc_xxx`）。
 
 ### 发送文本消息
 ```bash
 # 推荐：使用 --text 短格式（自动包装为 {"text":"..."}，无需手写 JSON）
+# chat_id 从 FEISHU_HOME_CHANNEL 环境变量获取，cron job 自动注入
 lark-cli im +messages-send \
-  --chat-id "oc_110e535468b6ffbf7a978eb95b1cd51f" \
-  --text $'📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 YYYY-MM-DD 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd'
+  --chat-id "${FEISHU_HOME_CHANNEL}" \
+  --text $'📺 每日AI热门视频推送（早/晚）\n✅ 内容已写入《每日AI热门视频推送》\n📅 YYYY-MM-DD HH:00\n🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd'
 ```
 
 ---
@@ -89,7 +107,7 @@ lark-cli im +messages-send \
 
 ```bash
 DOC_TOKEN="TBEddfdvQogBTxx9HArceKmlnYd"
-CHAT_ID="oc_110e535468b6ffbf7a978eb95b1cd51f"
+CHAT_ID="${FEISHU_HOME_CHANNEL:-oc_de41dc899cd2e0f9afad7dddb8fa1e89}"
 DATE_STR=$(date '+%Y-%m-%d')
 
 # 写入文档
@@ -98,14 +116,14 @@ lark-cli docs +update --api-version v2 \
   --command append \
   --content @./ai_trending_content.xml
 
-# 发送通知（使用 --text 短格式，无需手写 JSON）
+# 发送通知（使用 --text 短格式，无需手写 JSON，早/晚根据 cron job 调整）
 lark-cli im +messages-send \
   --chat-id "$CHAT_ID" \
-  --text $'📺 每日AI热门视频推送（早）\n✅ 内容已写入《每日AI热门视频推送》\n📅 '"$DATE_STR"' 06:00\n🔗 https://zt854jxlft.feishu.cn/docx/'"$DOC_TOKEN"
+  --text $'📺 每日AI热门视频推送（早/晚）\n✅ 内容已写入《每日AI热门视频推送》\n📅 '"$DATE_STR"' HH:00\n🔗 https://zt854jxlft.feishu.cn/docx/'"$DOC_TOKEN"
 ```
 
 ---
 
 ## 相关文件
 - 飞书文档：`https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd`
-- 通知群：「牧羊的机器人-群01」（`oc_110e535468b6ffbf7a978eb95b1cd51f`）
+- 通知群：`$FEISHU_HOME_CHANNEL`（cron job 自动注入，当前为 `oc_de41dc899cd2e0f9afad7dddb8fa1e89`）

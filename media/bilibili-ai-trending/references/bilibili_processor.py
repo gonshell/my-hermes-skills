@@ -69,6 +69,13 @@ def parse_bilibili_date(date_str, current_date=None):
         return None, None
     date_str = date_str.strip()
     
+    # 处理分钟级相对时间：'14分钟前', '33分钟前' 等
+    if '分钟前' in date_str:
+        m = re.search(r'(\d+)', date_str)
+        mins = int(m.group(1)) if m else 0
+        pub_date = current_date - timedelta(minutes=mins)
+        return pub_date, pub_date.strftime('%m-%d')
+    
     if '小时前' in date_str or date_str == '刚刚':
         hours = 0
         if '小时前' in date_str:

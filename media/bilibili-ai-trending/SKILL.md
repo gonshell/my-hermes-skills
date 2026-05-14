@@ -85,23 +85,42 @@ def calc_score(views, pub_date, current_date=NOW, max_views=10_000_000):
 
 ## 搜索URL模板
 
+⚠️ **B站 duration 参数全部失效（2026年5月确认）**，以下URL已不可靠。使用底部的实测有效URL。
+
 ```
-# 3天内最热门长视频（按播放量）
+# ⚠️ 以下URL的 duration 参数在非登录态下全部失效，仅作历史参考
+
+# 3天内最热门长视频（按播放量）— duration=4 失效，返回全时间段视频
 https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20ChatGPT%20Claude%20Qwen%20Deepseek&order=click&duration=4
 
-# 3天内最热门小视频
+# 3天内最热门小视频 — tids=124 也失效
 https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20ChatGPT%20Claude%20Qwen%20Deepseek&order=click&tids=124&duration=4
 
-# 3天内最新发布长视频
+# 3天内最新发布长视频 — duration=4 失效
 https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20ChatGPT%20Claude%20Qwen%20Deepseek&order=pubdate&duration=4
 
 # 3天内小视频最新发布
 https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20ChatGPT%20Claude%20Qwen%20Deepseek&order=pubdate&tids=124&duration=4
 ```
 
-### B站时间筛选参数
-- `duration=4` 表示3天内（实际为4天范围）
-- 其他选项：duration=1(10分钟内)、duration=2(一天内)、duration=3(一周内)
+### ✅ 实测有效的搜索URL（2026年5月14日验证）
+
+```bash
+# 最佳：宽泛中文关键词 + 按发布日期排序（无duration，返回分钟级最新内容）
+https://search.bilibili.com/video?keyword=AI%20%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&order=pubdate
+
+# 补充：大模型+深度学习聚焦
+https://search.bilibili.com/video?keyword=AI%20%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%20%E5%A4%A7%E6%A8%A1%E5%9E%8B%20%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0&order=pubdate
+
+# 补充：LLM模型名（结果少但精准）
+https://search.bilibili.com/video?keyword=DeepSeek%20GPT%20Claude%20Qwen%20LLM%20%E5%A4%A7%E6%A8%A1%E5%9E%8B&order=pubdate
+```
+
+### B站时间筛选参数（⚠️ 全部失效）
+- `duration=1`：视频时长10分钟内（不是"1天内"！），会过滤掉长视频
+- `duration=2`：一天内 — 失效
+- `duration=3`：一周内 — 失效，2026年5月实测返回2022年视频
+- `duration=4`：3天内 — 失效
 
 ## 输出格式
 
@@ -247,29 +266,47 @@ URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+Deep
 
 ## 🔧 关键发现与故障排除（2026年4月实测）
 
-### 1. duration=4 参数严重不可靠（重要！持续有效！）
-- **问题**：`duration=4`（3天内）在 browser 环境下几乎总是返回2025年甚至更老的视频
-- **原因**：B站搜索API的日期过滤在非登录态/headless环境下失效
-- **状态**：2026年5月实测仍完全失效，无改善迹象
-- **解决方案（实测有效）**：
-  1. 使用 `duration=1`（10分钟内）+ 在搜索词中包含年月：`DeepSeek 2026年4月` 或 `AI 2026 5月`
-  2. 使用 `order=pubdate&duration=1` 获取最新发布内容
-  3. 在代码层面按实际日期过滤 freshness > 0（7天内）
-  4. **最佳实践**：多次搜索组合——通用AI词+年月词 + 细分领域词+年月词
-- **⚠️ 重要约束**：即使使用上述方法，在每月中期运行时"3天内"窗口非常狭窄（可能只有1-2条视频），因为4月中旬的日期（04-10、04-12等）在5月10日已超7天新鲜度窗口。**建议将cron job安排在月初运行**，或适当扩大评分算法的新鲜度衰减周期以包含更多内容。
+### 1. 所有 duration 参数均失效（重要！2026年5月14日实测确认）
+- **问题**：`duration=1/2/3/4` 在 browser 环境下全部失效，返回全时间段视频
+- **duration=4**（3天内）：返回2024-2025年视频
+- **duration=3**（一周内）：同样返回2022-2025年视频，完全忽略时间过滤
+- **duration=1**（10分钟以下）：注意！这个参数含义是"视频时长≤10分钟"，不是"1天内"！用了反而会过滤掉长视频
+- **原因**：B站搜索API的日期过滤在非登录态/headless环境下完全失效
+- **状态**：2026年5月14日实测仍完全失效，无改善迹象
+- **⚠️ 关键结论：不要使用任何 duration 参数！**
+
+### 1b. 实测有效的搜索策略（2026年5月14日验证）
+
+**最佳方案：`order=pubdate` + 宽泛中文关键词 + 无 duration 参数**
 
 ```bash
-# 实测有效的搜索URL模式（2026年5月仍有效）
-# 最新发布（按时间，最有效）
-https://search.bilibili.com/video?keyword=AI%20LLM%20GPT%20Claude%20Qwen%20Deepseek%202026%E5%B9%B4&order=pubdate&duration=1
+# ✅ 最佳：通用AI中文词 + 按发布日期排序（无duration参数）
+# 返回分钟级最新内容（"14分钟前"、"1小时前"等相对时间戳）
+https://search.bilibili.com/video?keyword=AI%20%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&order=pubdate
 
-# 最热门（按播放量）
-https://search.bilibili.com/video?keyword=AI%20GPT%20Claude%20Qwen%20Deepseek%202026%E5%B9%B4&order=click&duration=1
+# ✅ 补充：更细分的关键词（返回较少但更精准）
+https://search.bilibili.com/video?keyword=AI%20%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%20%E5%A4%A7%E6%A8%A1%E5%9E%8B%20%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0&order=pubdate
 
-# 细分领域+年月（补充）
-https://search.bilibili.com/video?keyword=DeepSeek%20RAG%20Agent%202026%204%E6%9C%88&order=pubdate&duration=1
-https://search.bilibili.com/video?keyword=AI%202026%204%E6%9C%88%E6%9C%80%E6%96%B0&order=pubdate&duration=1
+# ✅ 补充：LLM模型相关（结果较少但更聚焦）
+https://search.bilibili.com/video?keyword=DeepSeek%20GPT%20Claude%20Qwen%20LLM%20%E5%A4%A7%E6%A8%A1%E5%9E%8B&order=pubdate
+
+# ❌ 无效：order=click 返回全时间热门视频（无法按日期过滤）
+# ❌ 无效：加 duration=1 会过滤到10分钟以下的短视频
+# ❌ 无效：关键词加"2026年"只是标题匹配，不保证内容是最近的
 ```
+
+**推荐工作流：**
+1. 先用 `order=pubdate` + `AI 人工智能` 获取最新视频（scroll 3次，提取全部数据）
+2. 在 Python 中用 `parse_bilibili_date()` 解析相对日期
+3. 按 freshness > 0（7天内）过滤
+4. 按 calc_score() 排序
+5. 按时长分类长/短视频
+
+**关键词选择策略：**
+- `AI 人工智能` → 最宽泛，结果最多，能捕获"X分钟前"的最新内容
+- `AI 人工智能 大模型 深度学习` → 稍窄，更聚焦大模型
+- `DeepSeek GPT Claude Qwen LLM 大模型` → 精准但结果少，很多是旧视频因为标题匹配
+- 不要在关键词中加"2026年"——这只是标题文本匹配，反而会漏掉不包含年份的最新视频
 
 ### 2. 播放量 + 视频时长混合字段解析（2026年5月实测修正）
 - **DOM格式**：`"1.3万250932"` 或 `"4万70721"` — 播放量、点赞数、时长三者粘连！
@@ -311,11 +348,12 @@ https://search.bilibili.com/video?keyword=AI%202026%204%E6%9C%88%E6%9C%80%E6%96%
 
 ### 3. 日期解析（相对日期 → 实际日期）
 Bilibili 搜索结果使用相对日期格式，必须转换：
-| 显示格式 | 含义 | 转换结果（假设2026-04-27） |
+| 显示格式 | 含义 | 转换结果（假设2026-05-14） |
 |----------|------|--------------------------|
-| `昨天` | 昨天 | 2026-04-26 |
-| `3小时前` / `刚刚` | 几小时前 | 2026-04-27（当天） |
-| `前天` | 前天 | 2026-04-25 |
+| `14分钟前` | 几分钟前 | 2026-05-14（当天） |
+| `昨天` | 昨天 | 2026-05-13 |
+| `3小时前` / `刚刚` | 几小时前 | 2026-05-14（当天） |
+| `前天` | 前天 | 2026-05-12 |
 | `04-20` | 月-日 | 2026-04-20（如月<=当前月则当年，否则去年） |
 
 ⚠️ **CRITICAL BUG FOUND**: `昨天` 和 `前天` 有时不会被作者的「·」分隔解析捕获，直接以原始字符串形式出现在date字段中！必须在提取后额外处理这些相对日期字符串。
@@ -379,6 +417,19 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
 - 滚动后 DOM 结构可能不变，但实际内容已懒加载
 - 每次滚动后重新执行提取脚本，确保捕获新加载的视频卡片
 - 建议滚动2-3次，每次等待页面响应
+
+### 7. order=click（按播放量排序）无法获取近期热门
+- **问题**：`order=click` 返回全时间段播放量最高的视频，不受任何 duration 参数约束
+- **实测**：`keyword=AI 人工智能&order=click&duration=4` 返回2020-2025年的全站热门视频
+- **解决方案**：只能通过 `order=pubdate` 获取最新视频，然后在代码中按播放量排序
+- **⚠️ 这意味着无法直接获取"近期最热门"视频**——只能在最新视频中找播放量较高的
+
+### 8. 播放量提取的 a.textContent 包含标题文本（2026年5月确认）
+- **问题**：`c.querySelector('a[href*="/video/BV"]')` 获取的第一个链接，其 `textContent` 包含标题+播放量+点赞+时长全部文本
+- **现象**：中文标题无空格，第一个空格出现在播放量数字前，但标题本身含数字（如"4步"、"2026"）
+- **结果**：`views` 字段会包含标题中的数字，如 views="82025516" 实际是标题中"4" + 播放量"8" + 点赞"2" + 时长"02:55:16"
+- **更可靠的方案**：使用 `a.textContent` 提取末尾的播放量+时长模式，或直接从DOM snapshot中解析
+- **临时修复**：在 `order=pubdate` 搜索中，新视频播放量普遍很低（个位数到几百），解析误差影响较小
 
 ## 📁 参考实现
 
