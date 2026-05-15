@@ -1,6 +1,6 @@
 """
 Bilibili AI Trending — Python Processor
-Validated 2026-05-10. Handles: views+duration parsing, date parsing, score calculation.
+Validated 2026-05-15. Handles: views+duration parsing, date parsing, score calculation.
 
 Usage:
     from bilibili_processor import parse_video_data, calc_score, NOW
@@ -10,18 +10,19 @@ Usage:
 import math, re
 from datetime import datetime, timedelta
 
-NOW = datetime(2026, 5, 10)  # Update to current date in cron job
+NOW = datetime(2026, 5, 15)  # Update to current date in cron job
 
 
 def parse_views_and_duration(text):
-    """解析粘连的 '1.3万250932' → views=13000, duration='25:09:32'
+    """解析链接文本 '稍后再看67 15 03:23:15' → views=67, duration='03:23:15'
     
-    B站 DOM 格式: "1.3万250932" = 播放量 + HHMMSS时长（无分隔符）
-    也有可能是 "4万70721" = 播放量 + MMDDSS
+    B站 DOM 链接文本格式: "稍后再看VV DD HH:MM:SS"
+    VV = 播放量(第一个数字), DD = 弹幕数(第二个数字), 然后是时长
+    ⚠️ 必须只取第一个token作为播放量，不能把 VV+DD 连在一起解析！
     """
     if not text:
         return 0, ''
-    text = text.strip()
+    text = text.strip().replace('稍后再看', '')
     
     # 匹配 HH:MM:SS 或 MM:SS (从末尾)
     m = re.search(r'(\d{1,2}):(\d{2}):(\d{2})\s*$', text)
@@ -39,11 +40,13 @@ def parse_views_and_duration(text):
             duration = ''
             num_part = text
     
-    num_part = re.sub(r'[^\d.万]', '', num_part)
-    if '万' in num_part:
-        views = float(num_part.replace('万', '')) * 10000
+    # ⚠️ num_part may be "67 15" (views + danmaku) — take ONLY first token
+    tokens = num_part.strip().split()
+    first_token = re.sub(r'[^\d.万]', '', tokens[0]) if tokens else ''
+    if '万' in first_token:
+        views = float(first_token.replace('万', '')) * 10000
     else:
-        views = int(num_part) if num_part.isdigit() else 0
+        views = int(float(first_token)) if first_token else 0
     return views, duration
 
 
@@ -74,7 +77,7 @@ def parse_bilibili_date(date_str, current_date=None):
         m = re.search(r'(\d+)', date_str)
         mins = int(m.group(1)) if m else 0
         pub_date = current_date - timedelta(minutes=mins)
-        return pub_date, pub_date.strftime('%m-%d')
+        return pub_date, date_str  # 保留原始相对日期字符串用于显示
     
     if '小时前' in date_str or date_str == '刚刚':
         hours = 0
@@ -83,7 +86,7 @@ def parse_bilibili_date(date_str, current_date=None):
             if m:
                 hours = int(m.group(1))
         pub_date = current_date - timedelta(hours=hours)
-        return pub_date, pub_date.strftime('%m-%d')
+        return pub_date, date_str
     
     if date_str == '昨天':
         return current_date - timedelta(days=1), '昨天'
@@ -108,9 +111,8 @@ def parse_bilibili_date(date_str, current_date=None):
 
 
 def calc_score(views, pub_date, current_date=None, max_views=10_000_000):
-    """综合评分: 播放量对数(50%) + 互动率(35%) + 新鲜度(15%)
+    """综合评分: 播放量对数(50%) + 互动率(35%, 无数据时=0) + 新鲜度(15%)
     
-    无点赞数据时互动率为0。
     新鲜度7天衰减至0。
     """
     if current_date is None:
@@ -134,7 +136,7 @@ def parse_video_data(raw_list, current_date=None):
     将原始视频数据列表处理为含评分的有序列表。
     
     raw_list: [{"title": ..., "author": ..., "views_raw": ..., "date_raw": ..., "link": ...}, ...]
-    views_raw: 原始字符串如 "1.3万250932"
+    views_raw: 原始字符串如 "67 15 03:23:15" 或 "稍后再看146019:11"
     date_raw: B站相对日期字符串
     
     返回: [{"title": ..., "author": ..., "views": int, "views_raw": str,
@@ -201,8 +203,9 @@ def sort_and_classify(videos):
 if __name__ == '__main__':
     # 演示用法
     test = [
-        {"title": "测试", "author": "UP", "views_raw": "1.3万250932", "date_raw": "05-05", "link": "https://www.bilibili.com/video/BV1HJRnBaEsd/"},
-        {"title": "测试2", "author": "UP2", "views_raw": "36400138", "date_raw": "3小时前", "link": "https://www.bilibili.com/video/BV1rc5E6xEuX/"},
+        {"title": "测试", "author": "UP", "views_raw": "稍后再看67 15 03:23:15", "date_raw": "4小时前", "link": "https://www.bilibili.com/video/BV1p45v6kE2m/"},
+        {"title": "测试2", "author": "UP2", "views_raw": "稍后再看146 0 19:11", "date_raw": "16分钟前", "link": "https://www.bilibili.com/video/BV1fc5q6MEnL/"},
+        {"title": "测试3", "author": "UP3", "views_raw": "稍后再看1.3万250932", "date_raw": "05-05", "link": "https://www.bilibili.com/video/BV1HJRnBaEsd/"},
     ]
     parsed = parse_video_data(test)
     for v in parsed:

@@ -34,6 +34,8 @@ rm -f ./ai_trending_content.xml
 
 **⚠️ `write_file` 路径规则**：写入时必须用相对路径 `./ai_trending_content.xml`，不能用 `/tmp/ai_trending_content.xml`，否则 lark-cli 报错 `--file must be a relative path within the current directory`。用 `write_file` 直接写到当前目录即可，无需经过 `/tmp/` 中转。
 
+**⚠️ 关键陷阱（2026-05 实测）**：`write_file` 报告写入成功，但后续 `lark-cli --content @./ai_trending_content.xml` 报 `no such file or directory`。原因：两者的实际工作目录不同（`write_file` 使用 agent session cwd，`lark-cli` 使用 terminal workdir）。**正确做法**：使用 `execute_code`（Python 文件 I/O）并显式 `os.chdir('/Users/xiesg/.hermes/hermes-agent')` 后再写入，确保文件落在 lark-cli 能找到的路径。写入后用 `lark-cli` 时也需指定 `workdir=/Users/xiesg/.hermes/hermes-agent`。
+
 ### XML 内容模板
 
 日期标题用 `<h1>`，各区块用 `<h2>`，视频条目用 `<ol><li>` 列表结构（不要用多个 `<p><br/>` 堆砌），URL 裸写在文本中：

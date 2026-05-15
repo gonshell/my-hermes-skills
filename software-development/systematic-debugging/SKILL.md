@@ -4,6 +4,7 @@ description: "4-phase root cause debugging: understand bugs before fixing."
 version: 1.1.0
 author: Hermes Agent (adapted from obra/superpowers)
 license: MIT
+platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [debugging, troubleshooting, problem-solving, root-cause, investigation]
@@ -148,6 +149,8 @@ search_files("variable_name\\s*=", path="src/", file_glob="*.py")
 - [ ] Evidence gathered (logs, state, data flow)
 - [ ] Problem isolated to specific component/code
 - [ ] Root cause hypothesis formed
+- [ ] **Checked current session context** — is this error from the current session or an old/historical session? (Historical errors don't need fixing in the current session)
+- [ ] **Gathered live evidence** — did you read actual logs before proposing causes, or were you guessing?
 
 **STOP:** Do not proceed to Phase 2 until you understand WHY it's happening.
 
@@ -270,6 +273,32 @@ pytest tests/ -q
 **Discuss with the user before attempting more fixes.**
 
 This is NOT a failed hypothesis — this is a wrong architecture.
+
+---
+
+## Pitfall: Don't Guess Without Logs
+
+**The user will tell you when you're guessing wrong.** Common form: "别猜这个问题了" (stop guessing), "先看日志" (check the logs first), "别假设" (don't assume).
+
+When this happens, you violated Phase 1 — you proposed hypotheses without gathering evidence from logs, files, or actual reproduction. The fix is always the same:
+
+```
+STOP hypothesizing → READ logs → IDENTIFY the actual error → then investigate
+```
+
+**Symptoms of guessing without evidence:**
+- Proposing multiple possible causes in a row without verification
+- Phrases like "probably", "likely", "might be", "could be"
+- Fixing something before confirming what the actual problem is
+- Continuing to speculate after user says "别猜"
+
+**Correct pattern (what you should have done):**
+```
+1. terminal(tail -100 ~/.hermes/logs/*.log | grep -i "error|401|auth")
+2. Identify exact error: base_url misconfiguration, exhausted credentials, etc.
+3. Propose single hypothesis backed by log evidence
+4. Test minimally
+```
 
 ---
 

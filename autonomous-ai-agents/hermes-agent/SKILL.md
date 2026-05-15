@@ -324,6 +324,7 @@ Hermes Agent is fully open source (MIT). No commercial/enterprise tier exists on
 ```
 ~/.hermes/config.yaml       Main configuration
 ~/.hermes/.env              API keys and secrets
+~/.hermes/memories/         USER.md + MEMORY.md (injected into system prompt at session start)
 $HERMES_HOME/skills/        Installed skills
 ~/.hermes/sessions/         Session transcripts
 ~/.hermes/logs/             Gateway and error logs
@@ -555,6 +556,27 @@ terminal(command="tmux new-session -d -s resumed 'hermes --resume 20260225_14305
 - **Tools/skills:** `/reset` starts a new session with updated toolset
 - **Config changes:** In gateway: `/restart`. In CLI: exit and relaunch.
 - **Code changes:** Restart the CLI or gateway process
+- **Memory / User Profile:** USER.md and MEMORY.md are injected into the system prompt at session start and **cannot be hot-reloaded mid-session**. To apply edits:
+  1. `/new` or `/reset` (quickest — starts a new session that loads the latest files)
+  2. Restart the Hermes process (same effect)
+  3. **Workaround for current session:** use the `memory` tool to add/remove entries so the database matches the disk file. This updates the memory database for future turns but does NOT change the system prompt block injected at session start.
+- **Memory file locations:** `~/.hermes/memories/USER.md` and `~/.hermes/memories/MEMORY.md` (NOT `~/.hermes/memory/`). These are the source files; the `memory` tool reads/writes a separate database that syncs from them at session start.
+- **Forcing a file re-read:** `read_file` deduplicates (returns "unchanged" if content hasn't changed since last read). Use `terminal` + `cat` to force a fresh read of the file on disk.
+
+### Browser / web search limitations (important)
+The browser tool runs WITHOUT residential proxies. Bot detection is aggressive on most major sites. Before attempting browser-based research, know the access landscape:
+
+**Typically blocked (do not waste time):**
+Google Search, Bing, DuckDuckGo, Reddit, YouTube, Forbes, Business Insider, TechCrunch, Statista, US Census/SBA (Cloudflare), Huxiu (slide verification), Cloudflare LP pages
+
+**Often accessible:**
+36kr (search works, article pages may timeout), Indie Hackers (full read access), GitHub (raw), Medium (partial), some WordPress/blog sites, government sites without Cloudflare
+
+**Practical guidance:**
+- For research tasks requiring web data, set expectations early: browser access is unreliable for most search engines and major media sites
+- Prefer API-based tools (lark-cli, gh CLI) over browser for structured data
+- When browser is the only option, try Indie Hackers, 36kr, or niche blog sites first
+- Do NOT delegate web search to sub-agents — they typically lack browser/web tools entirely and only have email tools
 
 ### Skills not showing
 1. `hermes skills list` — verify installed

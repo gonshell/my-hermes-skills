@@ -1,5 +1,8 @@
 # AI 硬件 Benchmark 数据来源参考
 
+> **定位说明**：本文件记录 AI 芯片（GPU/NPU）Benchmark 数据核查的经验沉淀，适用于硬件类技术调研报告。
+> 当报告主题为非硬件领域（云原生、数据库、前端框架等）时，数据收集方法遵循 SKILL.md「第二阶段：数据收集」的通用方法论，不参考本文件的具体 URL 和数据源。
+
 > 本文件由 `tech-research-doc` skill 维护，记录 AI 硬件（GPU/NPU）Benchmark 数据来源的核查经验。
 
 ---

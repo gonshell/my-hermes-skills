@@ -214,6 +214,69 @@ function parseViews(text) {
 }
 ```
 
+### ✅ 最佳提取方法：BV链接 + h3标题（2026年5月15日验证）
+
+**第一步：提取BV ID + 原始链接文本（播放量+弹幕+时长）**
+
+这是最可靠的方式——直接从页面所有 `/video/BV` 链接中提取：
+```javascript
+// 提取所有视频卡片的BV号和原始文本
+var r = [];
+var seen = {};
+var topLinks = document.querySelectorAll('a[href*="/video/BV"]');
+topLinks.forEach(function(a){
+  var href = a.href;
+  var bvMatch = href.match(/BV[\w]+/);
+  if(!bvMatch || seen[bvMatch[0]]) return;
+  seen[bvMatch[0]] = true;
+  var text = a.textContent.trim();
+  r.push({bv: bvMatch[0], raw: text.substring(0, 200)});
+});
+JSON.stringify(r);
+// 返回格式: {bv: "BV1fc5q6MEnL", raw: "稍后再看146019:11"}
+// raw = "稍后再看" + 播放量 + 弹幕数 + 时长(HH:MM:SS 或 MM:SS)
+```
+
+**第二步：提取标题 + 作者 + 日期**
+
+用 h3 标签定位标题，向上遍历找到作者/日期：
+```javascript
+var r = [];
+var h3s = document.querySelectorAll('h3');
+h3s.forEach(function(h){
+  var title = h.textContent.trim();
+  if(!title) return;
+  var titleLink = h.closest('a');
+  var bv = '';
+  if(titleLink && titleLink.href) {
+    var m = titleLink.href.match(/BV[\w]+/);
+    bv = m ? m[0] : '';
+  }
+  // 作者/日期在父级的兄弟 <a> 中，格式 "UP主名 · 日期"
+  var parent = h.parentElement.parentElement;
+  var author = '', date = '';
+  var allAs = parent.querySelectorAll('a');
+  allAs.forEach(function(a){
+    var txt = a.textContent.trim();
+    if(txt.includes('·') && txt.length < 80){
+      var p = txt.split('·');
+      author = p[0].trim();
+      date = p.slice(1).join('·').trim();
+    }
+  });
+  r.push({t: title.substring(0,80), bv: bv, a: author, d: date});
+});
+JSON.stringify(r);
+```
+
+**第三步：在 Python 中合并两步数据，按 BV 关联**
+
+### ⚠️ 关键陷阱：初始快照 vs 滚动后提取
+
+- **初始页面快照**（browser_navigate 返回）包含正确的作者+日期信息
+- **滚动后**，用 `parentElement × N` 向上遍历DOM会导致scope过大，所有视频的author都变成同一个值
+- **最佳策略**：从初始快照手动记录作者/日期，从 `a[href*="/video/BV"]` 提取BV+播放量，最后在Python中合并
+
 ### 备用标题提取（当 card 选择器失败时）
 ```javascript
 var h3s = document.querySelectorAll('h3');
@@ -316,19 +379,21 @@ https://search.bilibili.com/video?keyword=DeepSeek%20GPT%20Claude%20Qwen%20LLM%2
   - 时长格式为 `HHMMSS` 或 `MMDDSS`，没有分隔符直接拼接在播放量后面
   - **⚠️ 必须用正则提取时长**：`/(\d{1,2}):(\d{2}):(\d{2})$/` 或 `/(\d{1,2}):(\d{2})$/`
   - 时长如果出现 `25:09:32`（>24小时）或 `09:32`（分钟），说明是视频总时长
-- **python解析实现**：
+- **python解析实现**（⚠️ 2026-05-15 修正：必须split取第一个token）：
   ```python
   def parse_views_and_duration(text):
-      """解析 '1.3万250932' → views=13000, duration='25:09:32'"""
+      """解析 '稍后再看67 15 03:23:15' → views=67, duration='03:23:15'
+      格式: 稍后再看 + 播放量(VV) + 弹幕数(DD) + 时长
+      """
       if not text: return 0, ''
-      # 先匹配时长（倒序找 HH:MM:SS 或 MM:SS）
-      m = re.search(r'(\d{1,2}):(\d{2}):(\d{2})\s*$', text)   # HH:MM:SS
+      text = text.strip().replace('稍后再看', '')
+      m = re.search(r'(\d{1,2}):(\d{2}):(\d{2})\s*$', text)
       if m:
           h, mn, s = int(m.group(1)), int(m.group(2)), int(m.group(3))
           duration = f"{h}:{mn:02d}:{s:02d}"
           num_part = text[:m.start()].strip()
       else:
-          m2 = re.search(r'(\d{1,2}):(\d{2})\s*$', text)        # MM:SS
+          m2 = re.search(r'(\d{1,2}):(\d{2})\s*$', text)
           if m2:
               mn, s = int(m2.group(1)), int(m2.group(2))
               duration = f"{mn}:{s:02d}"
@@ -336,13 +401,16 @@ https://search.bilibili.com/video?keyword=DeepSeek%20GPT%20Claude%20Qwen%20LLM%2
           else:
               duration = ''
               num_part = text.strip()
-      # 解析播放量
-      num_part = re.sub(r'[^\d.万]', '', num_part)
-      if '万' in num_part:
-          views = float(num_part.replace('万','')) * 10000
+      # ⚠️ 关键: num_part可能是 "67 15" (播放量+弹幕)，必须只取第一个token
+      tokens = num_part.strip().split()
+      first_token = re.sub(r'[^\d.万]', '', tokens[0]) if tokens else ''
+      if '万' in first_token:
+          views = float(first_token.replace('万','')) * 10000
       else:
-          views = int(num_part) if num_part.isdigit() else 0
+          views = int(float(first_token)) if first_token else 0
       return views, duration
+  ```
+    return views, duration
   ```
 - **重要**：时长 > 24h 意味着B站视频时长格式为 `HH:MM:SS`（可能超过24小时）
 
@@ -428,8 +496,25 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
 - **问题**：`c.querySelector('a[href*="/video/BV"]')` 获取的第一个链接，其 `textContent` 包含标题+播放量+点赞+时长全部文本
 - **现象**：中文标题无空格，第一个空格出现在播放量数字前，但标题本身含数字（如"4步"、"2026"）
 - **结果**：`views` 字段会包含标题中的数字，如 views="82025516" 实际是标题中"4" + 播放量"8" + 点赞"2" + 时长"02:55:16"
-- **更可靠的方案**：使用 `a.textContent` 提取末尾的播放量+时长模式，或直接从DOM snapshot中解析
-- **临时修复**：在 `order=pubdate` 搜索中，新视频播放量普遍很低（个位数到几百），解析误差影响较小
+- **✅ 解决方案**：使用 `a[href*="/video/BV"]` 遍历法（见上面"最佳提取方法"），该链接的 textContent 是 `"稍后再看N D HH:MM:SS"` 格式（N=播放量 D=弹幕），不包含标题文本
+
+### 9. ⚠️ 绝对不能编造 BV ID（2026年5月15日实测）
+- **问题**：当提取数据时缺少BV ID，LLM可能凭模式猜测BV号（如 `BV1Ek5q6gEX1` 到 `BV1Ek5q6gEX13`）
+- **后果**：这些BV号指向的视频可能不存在或完全不相关，报告中的链接全部失效
+- **⚠️ 规则：BV ID 必须从页面 DOM 中提取，绝不能靠模式推测或手动构造**
+- **解决**：如果缺少BV数据，返回浏览器页面重新用 `a[href*="/video/BV"]` 提取真实ID
+
+### 10. 滚动后 DOM 遍历 scope 膨胀（2026年5月15日实测）
+- **问题**：初始页面中 `h3 → parentElement × 2-4` 能正确圈定单个视频卡片范围；但滚动后，DOM 结构变化导致同样的向上遍历层级会覆盖多个卡片甚至整个列表容器
+- **现象**：所有视频的 author 字段变成同一个值（如全部显示 "小狐酱酱"）
+- **原因**：B站懒加载后视频卡片的 DOM 嵌套深度改变，固定的向上遍历层级不再对应单个卡片
+- **✅ 解决**：不要依赖 `parentElement × N` 向上遍历；改为用初始快照的作者/日期数据 + `a[href*="/video/BV"]` 提取的BV+播放量，在 Python 中按 BV 关联
+
+### 11. 链接文本解析：播放量 vs 弹幕数的空格分隔（2026年5月15日确认）
+- **DOM格式更新**：链接文本实际为 `"稍后再看VV DD HH:MM:SS"` — V=播放量, D=弹幕数, 然后是时长
+- **示例**：`"稍后再看67 15 03:23:15"` → 播放量=67, 弹幕=15, 时长=03:23:15
+- **⚠️ 之前的解析器把 "67 15" 连起来解析为 6715**，必须在解析播放量时只取第一个空格前的数字
+- **已修复**：`bilibili_processor.py` 中的 `parse_views_and_duration()` 现在用 `split()` 取第一个 token
 
 ## 📁 参考实现
 

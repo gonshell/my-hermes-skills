@@ -14,6 +14,43 @@ description: 科学技术类研究报告的完整交付流程。支持6种报告
 
 ---
 
+## 流程导航
+
+收到报告需求后，按以下顺序执行。每一步指向对应章节。
+
+```
+收到需求
+  │
+  ├→ 第零阶段：类型识别 ← 你在这里
+  │   识别6种报告类型 → 决定后续流程分支
+  │   详见「报告类型识别」章节
+  │
+  ├→ 第一阶段：结构设计（不动笔）
+  │   明确读者 → 确定核心问题 → 设计章节结构
+  │   ⚠️ 完成后必须向用户确认结构方案
+  │   详见「第一阶段：结构设计」章节
+  │
+  ├→ 第二阶段：数据收集（不动笔）
+  │   按可信度优先级收集数据
+  │   详见「第二阶段：数据收集」章节
+  │
+  ├→ 第三阶段：写作执行
+  │   按报告类型走差异化写作分支
+  │   详见「第三阶段：写作执行」章节
+  │   写作规范：三层结构 + [N/T/E]标注 + 置信度分级
+  │
+  └→ 第四阶段：Review
+      自检清单 + 三角评审（企业级文档）
+      详见「第四阶段：Review」章节
+```
+
+**深层文档**（按需查阅，不在主流程中）：
+- 企业文档修订 → 「多智能体执行模式」章节 + `references/multi-agent-execution.md`
+- 需求分析边界 → `references/requirements-analysis-boundary.md`
+- 内容深度诊断 → `references/content-enrichment-diagnosis.md`
+
+---
+
 ## 报告类型识别（首要步骤）
 
 收到需求后，**第一步不是动笔，而是识别报告类型**。不同类型走不同流程、不同结构、不同质量标准。
@@ -295,7 +332,7 @@ Step 3：场景详析（每个核心场景用以下模板）
   │ 【场景名称】                           │
   │ 典型流程：（ASCII 流程图或文字描述）      │
   │ 适用任务：（具体任务列表）               │
-  │ 为什么适合 HiClaw：（优势分析）          │
+  │ 为什么适合：（优势分析）                  │
   └─────────────────────────────────────┘
 
 Step 4：场景匹配矩阵
@@ -329,7 +366,7 @@ https://raw.githubusercontent.com/{owner}/{repo}/main/docs/architecture.md
 https://raw.githubusercontent.com/{owner}/{repo}/main/AGENTS.md
 ```
 
-> **教训：搜索不到时，先用 GitHub API 查仓库列表，再读 README.md。** HiClaw 项目早期无官网，搜索引擎无收录，但 GitHub 仓库已有完整信息。
+> **教训：搜索不到时，先用 GitHub API 查仓库列表，再读 README.md。** 部分开源项目早期无官网、搜索引擎无收录，但 GitHub 仓库已有完整信息。
 
 ### 三层结构（每个技术点都用这个节奏）
 
@@ -451,7 +488,7 @@ https://raw.githubusercontent.com/{owner}/{repo}/main/AGENTS.md
 
 ---
 
-**教训0b："干瘪"不一定是结构问题，而是内容深度问题（本次session核心教训）**
+**教训0b："干瘪"不一定是结构问题，而是内容深度问题**
 
 当用户说"内容太干瘪/不够充分"时，原因可能有三种，处置方式截然不同：
 
@@ -461,15 +498,15 @@ https://raw.githubusercontent.com/{owner}/{repo}/main/AGENTS.md
 | **内容深度不足** | 数字没有背景、观点没有案例、因果链断裂 | 充实现有章节，不改结构 |
 | **表达机械** | "首先/其次/最后"、套话多、无自然语气 | 去AI味，不重写内容 |
 
-**本次session的真实路径：**
+**典型失败路径（已发生过的真实案例）：**
 
 ```
 用户说"全文略显干瘪，每个章节不够充分"
     ↓
-系统错误判断：认为结构有问题（越界内容）
+错误判断：认为结构有问题
     → 错误行动：重新设计结构 → 触发"哪些内容不必要"
     → 更大错误：用户说"不需要精简"后，理解为"全部扩充"
-    → 最终行动：从头重写整个文档（46KB → 110KB）
+    → 最终行动：从头重写整个文档
     ↓
 实际上：原文档结构正确（已通过三角评审验证）
 用户真正想要的：在原结构基础上，充实每章的论点展开、案例、数字背景
@@ -662,7 +699,7 @@ https://raw.githubusercontent.com/{owner}/{repo}/main/AGENTS.md
 
 `references/ai-capability-boundary.md` — **⚠️ 新增** AI 能力边界声明模板：按报告类型的差异化声明、预测类内容的特别声明、声明位置建议。
 
-`references/hardware-benchmark-sources.md` — AI 硬件 Benchmark 数据来源参考：可信的公开数据源（NVIDIA Datasheet、MLCommons、vLLM Performance Dashboard）、国产芯片数据缺口说明、快速失败原则、URL 核查记录。
+`references/hardware-benchmark-sources.md` — **AI 芯片领域专用** 可信的公开数据源（NVIDIA Datasheet、MLCommons、vLLM Performance Dashboard）、国产芯片数据缺口说明、快速失败原则、URL 核查记录。非硬件类报告不适用，数据收集遵循第二阶段通用方法论。
 
 `references/three-perspective-review.md` — 三角评审法详细操作指南：评审触发时机、角色配置模板、评分标准、P0/P1/P2问题判定规则、评审报告模板。
 
@@ -671,6 +708,28 @@ https://raw.githubusercontent.com/{owner}/{repo}/main/AGENTS.md
 `references/requirements-analysis-boundary.md` — 需求分析报告的边界：业务需求 vs 产品需求 vs 技术需求的区分方法、三层需求定义、判断标准（是需求还是设计？）、常见越界内容及处理方式、需求分析报告正确结构。
 
 `references/content-enrichment-diagnosis.md` — 内容深度不足的诊断与处理方法：当用户说"干瘪/不够充分"时的判断框架（结构缺失 vs 深度不足 vs 表达机械）、诊断步骤、具体修复方式（含数字/案例/因果链的充实写法）、去AI味的正确时机和方式。
+
+## 维护原则
+
+当需要修订本 skill 时，**先确认设计意图，再评估变更提案**。看似合理的建议可能与核心设计冲突。
+
+本 skill 的核心设计意图：
+- 四阶段流程不可跳步（先确认结构再动笔）
+- 六种报告类型各有独立模板和流程分支
+- 双标注体系（[N/T/E] + 置信度分级）独立使用、互不替代
+- AI 能力边界声明是诚实性底线
+- 教训来自实战，保留通用模式，去除项目特异性
+
+已被拒绝的提案及理由（避免重复踩坑）：
+- "快速入门路径" → 与"先确认结构再动笔"冲突
+- "泛化 hardware-benchmark-sources" → 会稀释具体经验的价值，正确做法是标注领域限定
+- "补充 delegate_task 调用示例" → 方法论不应绑定具体工具，SKILL.md 已有使用提示
+- "补充英文触发词" → 用户以中文工作，属于范围蔓延
+- "6 种类型端到端测试" → 方法论不是代码，逻辑自洽即可
+
+> 详见 `references/skill-validation-test-cases.md`：已执行的 8 个验证测试用例及结果，可供未来验证周期复用。
+
+---
 
 ## 关联 Skill
 
