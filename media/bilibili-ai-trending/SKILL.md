@@ -424,48 +424,65 @@ Bilibili 搜索结果使用相对日期格式，必须转换：
 | `前天` | 前天 | 2026-05-12 |
 | `04-20` | 月-日 | 2026-04-20（如月<=当前月则当年，否则去年） |
 
-⚠️ **CRITICAL BUG FOUND**: `昨天` 和 `前天` 有时不会被作者的「·」分隔解析捕获，直接以原始字符串形式出现在date字段中！必须在提取后额外处理这些相对日期字符串。
+⚠️ **CRITICAL BUG FOUND (2026-05-16 session)**: Original parser did NOT handle "N分钟前" format.
+Videos like "1分钟前" returned `None` → excluded from all recent results silently.
+必须在 `小时前` 检查之前先检查 `分钟前`。
 
 ```python
-def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
+def parse_bilibili_date(date_str, current_date=datetime(2026, 5, 16, 21, 0)):
+    """
+    Parse Bilibili relative date → (datetime_obj, display_string).
+    ⚠️ Must handle '分钟前' BEFORE '小时前' — order matters!
+    """
     if not date_str:
         return None, None
     date_str = date_str.strip()
-    
-    # 关键：先检查是否包含小时前/昨天/前天等相对日期
-    if '小时前' in date_str or date_str == '刚刚':
-        # 计算小时数
-        if '小时前' in date_str:
-            try:
-                hours = int(re.search(r'(\d+)', date_str).group(1))
-                pub_date = current_date - timedelta(hours=hours)
-            except:
-                pub_date = current_date
-        else:
-            pub_date = current_date
-        return pub_date, pub_date.strftime('%m-%d')
-    
+
+    # "N分钟前" — MUST check before "N小时前"
+    if '分钟前' in date_str:
+        try:
+            mins = int(re.search(r'(\d+)', date_str).group(1))
+            pub_date = current_date - timedelta(minutes=mins)
+            return pub_date, date_str
+        except:
+            pass
+
+    # "N小时前"
+    if '小时前' in date_str:
+        try:
+            hours = int(re.search(r'(\d+)', date_str).group(1))
+            pub_date = current_date - timedelta(hours=hours)
+            return pub_date, date_str
+        except:
+            pass
+
+    if date_str == '刚刚':
+        return current_date, '刚刚'
     if date_str == '昨天':
         pub_date = current_date - timedelta(days=1)
         return pub_date, '昨天'
-    elif date_str == '前天':
+    if date_str == '前天':
         pub_date = current_date - timedelta(days=2)
         return pub_date, '前天'
-    elif '-' in date_str and len(date_str) == 5:  # MM-DD格式
+
+    # MM-DD format (e.g. "03-17")
+    if re.match(r'^\d{2}-\d{2}$', date_str):
         try:
             m, d = map(int, date_str.split('-'))
-            # 如果月份大于当前月份，说明是今年；否则是去年（跨年问题）
-            year = current_date.year if m <= current_date.month else current_date.year - 1
+            year = current_date.year
             pub_date = datetime(year, m, d)
             return pub_date, date_str
         except:
             return None, date_str
-    elif '-' in date_str and len(date_str) == 10:  # YYYY-MM-DD格式
+
+    # YYYY-MM-DD format
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
         try:
             pub_date = datetime.strptime(date_str, '%Y-%m-%d')
             return pub_date, date_str
         except:
             return None, date_str
+
     return None, date_str
 ```
 
@@ -525,4 +542,4 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 4, 27)):
 - `calc_score()`: 综合评分公式（播放量对数 + 新鲜度，无点赞数据时互动率为0）
 - `sort_and_classify()`: 按score降序，返回长视频/短视频分组
 
-推荐在 `execute_code` 中使用，browser_console 只负责提取原始文本。
+**推荐做法**：将上述 `parse_video_data()`, `parse_bilibili_date()`, `parse_views_and_duration()`, `calc_score()`, `filter_recent()`, `sort_and_classify()` 复制到 `execute_code` 中直接运行，browser_console 只负责提取原始文本。
