@@ -30,6 +30,7 @@ metadata:
 **不适用场景：**
 - 用户只想创建飞书文档但无 Markdown 源文件 → 直接使用 `lark-doc` skill
 - 用户需要编辑已有飞书文档 → 使用 `lark-doc` skill 的 `docs +update`
+- 用户明确要求保留原有富格式（Callout、画板等）→ 需要使用 XML 格式发布，不是 Markdown 格式；此时应加载 `lark-doc` skill 并阅读 `references/lark-doc-xml.md`
 
 ## 前置条件
 
@@ -40,6 +41,27 @@ metadata:
 3. 获取用户的 Markdown 源内容（文本粘贴或本地 `.md` 文件路径）
 
 ## 核心工作流
+
+### 第零步：选择发布格式（Markdown vs XML）
+
+发布前先判断用哪种格式：
+
+| 条件 | 推荐格式 | 说明 |
+|------|---------|------|
+| 用户明确要求"不改变内容仅优化格式" | **XML 格式** | 才能启用 Callout、分栏、画板等富块 |
+| 文档以文字为主，表格少（<5个）| Markdown 直发 | 快速简单，表格渲染正常 |
+| 文档表格密集（10+表格）| XML 格式 | Markdown 的 GFM 表格渲染效果差 |
+| 需要嵌入 Mermaid/PlantUML 图表 | **必须 XML 格式** | Markdown 不支持画板嵌入 |
+| 源文件 Markdown 格式良好、无需增强 | Markdown 直发 | 可跳过 XML 转换 |
+
+**判断步骤**：
+1. 读取源 Markdown 文件
+2. 扫描是否有 `:::tip`、````mermaid`、`<callout>` 等飞书特有语法 → 必须 XML
+3. 扫描表格密度（>5个表格）→ 推荐 XML
+4. 用户明确说"保留格式/不改变格式" → XML
+5. 都不是 → Markdown 直发快捷路径
+
+**⚠️ 特别注意**：如果源 `.md` 文件是从 read_file 工具读取的（行首有 `1|` `2|` 格式的行号前缀），**必须先用 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号再写入临时文件发布**。read_file 输出格式为 `LINE_NUM|CONTENT`，不是纯 Markdown，直接写入会导致整篇文档每行都以行号开头。
 
 ### 第一步：解析 Markdown 结构
 
@@ -301,10 +323,14 @@ lark-cli docs +update --api-version v2 --doc "{doc_token}" --command append --do
 
 12. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。
 
+13. **read_file 输出的文件含行号前缀**：从 read_file 读取的 `.md` 文件，行首是 `1|` `2|` 格式的行号，不是纯 Markdown。直接写入发布会导致整篇文档都是行号。**必须先 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号**，再写入临时文件。
+
 ## 验证清单
 
 - [ ] 已加载 `lark-doc` skill 并读取 `references/lark-doc-xml.md`
 - [ ] 已读取 `lark-shared` skill 确认认证状态
+- [ ] 已判断使用 Markdown 直发还是 XML 格式（见"第零步"）
+- [ ] 源文件行号前缀已清除（`re.sub(r"^\s*\d+\|", "", raw)`）
 - [ ] Markdown 源内容已完整解析，所有元素已映射
 - [ ] 图表意图识别已执行，匹配的章节已插入对应图表
 - [ ] Callout 映射正确（emoji、background-color、border-color）
@@ -314,4 +340,5 @@ lark-cli docs +update --api-version v2 --doc "{doc_token}" --command append --do
 - [ ] 章节间已插入 `<hr/>`
 - [ ] 文档总长度 > 4000 字符时已规划分批追加策略
 - [ ] `lark-cli docs +create` 命令包含 `--api-version v2`
+- [ ] 发布后用 `lark-cli docs +fetch` 验证内容是否正确
 - [ ] 创建成功后已返回文档 URL 给用户

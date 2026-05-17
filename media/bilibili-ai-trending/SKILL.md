@@ -533,13 +533,20 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 5, 16, 21, 0)):
 - **⚠️ 之前的解析器把 "67 15" 连起来解析为 6715**，必须在解析播放量时只取第一个空格前的数字
 - **已修复**：`bilibili_processor.py` 中的 `parse_views_and_duration()` 现在用 `split()` 取第一个 token
 
+### 12. Python字符串中的中文引号导致 SyntaxError（2026年5月17日确认）
+- **问题**：当在 `execute_code` 中直接写入包含中文文本的 Python 代码时，中文直角引号 `"` 和 `"`（U+201C/U+201D）会被 shell 转义或损坏，导致 `SyntaxError: invalid syntax`
+- **示例**：`"大模型Agent也会"记仇"..."` 中的 `"记仇"` 使用了中文引号，Python 解析器找不到字符串边界
+- **✅ 解决方案**：使用 `write_file` 将含中文的 Python 代码写入 .py 文件再执行，绕开终端字符串转义问题
+- **✅ 根本解决**：在 `execute_code` 的多行字符串中避免嵌套引号；或提前将中文文本存入数据结构（如 list of tuples），用英文变量名引用
+
 ## 📁 参考实现
 
 `references/bilibili_processor.py` — 完整的Python处理器，包含：
 - `parse_views_and_duration()`: 处理粘连的播放量+时长字段（`"1.3万250932"` → views + duration）
 - `parse_bilibili_date()`: 相对日期解析（昨天、前天、MM-DD、YYYY-MM-DD）
-- `parse_video_data()`: 批量处理原始数据，返回含评分/duration/是否短视频字段的结构化列表
 - `calc_score()`: 综合评分公式（播放量对数 + 新鲜度，无点赞数据时互动率为0）
-- `sort_and_classify()`: 按score降序，返回长视频/短视频分组
+- `duration_to_sec()`: B站时长字符串 → 秒数
+- `process_all()`: 整合 raw_data + meta_data，输出分组列表（长视频/短视频）
+- `format_report()`: 生成纯文本排行报告
 
-**推荐做法**：将上述 `parse_video_data()`, `parse_bilibili_date()`, `parse_views_and_duration()`, `calc_score()`, `filter_recent()`, `sort_and_classify()` 复制到 `execute_code` 中直接运行，browser_console 只负责提取原始文本。
+**推荐做法**：将上述函数复制到 `execute_code` 中直接运行，browser_console 只负责提取原始文本。

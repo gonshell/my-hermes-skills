@@ -1,30 +1,22 @@
-"""
-Bilibili AI Trending — Python Processor
-Validated 2026-05-15. Handles: views+duration parsing, date parsing, score calculation.
-
-Usage:
-    from bilibili_processor import parse_video_data, calc_score, NOW
-    videos = parse_video_data(raw_list, current_date=NOW)
-    videos.sort(key=lambda x: x['score'], reverse=True)
-"""
-import math, re
+import math
+import re
 from datetime import datetime, timedelta
 
-NOW = datetime(2026, 5, 15)  # Update to current date in cron job
+# Usage: copy all functions below into execute_code, set NOW to current time
+# then call process_all(raw_data, meta_data) to get scored/sorted results
+
+NOW = datetime(2026, 5, 17, 21, 0)  # SET THIS to current time in cron job
 
 
 def parse_views_and_duration(text):
-    """解析链接文本 '稍后再看67 15 03:23:15' → views=67, duration='03:23:15'
-    
-    B站 DOM 链接文本格式: "稍后再看VV DD HH:MM:SS"
-    VV = 播放量(第一个数字), DD = 弹幕数(第二个数字), 然后是时长
-    ⚠️ 必须只取第一个token作为播放量，不能把 VV+DD 连在一起解析！
+    """Parse '稍后再看VV DD HH:MM:SS' → views, duration.
+    Handles the粘连 format where play count and duration are fused together.
+    CRITICAL: only takes the FIRST space-delimited token as the play count.
     """
     if not text:
         return 0, ''
     text = text.strip().replace('稍后再看', '')
-    
-    # 匹配 HH:MM:SS 或 MM:SS (从末尾)
+    # Extract duration HH:MM:SS or MM:SS from end
     m = re.search(r'(\d{1,2}):(\d{2}):(\d{2})\s*$', text)
     if m:
         h, mn, s = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -38,11 +30,10 @@ def parse_views_and_duration(text):
             num_part = text[:m2.start()].strip()
         else:
             duration = ''
-            num_part = text
-    
-    # ⚠️ num_part may be "67 15" (views + danmaku) — take ONLY first token
+            num_part = text.strip()
+    # CRITICAL: only take first token as views
     tokens = num_part.strip().split()
-    first_token = re.sub(r'[^\d.万]', '', tokens[0]) if tokens else ''
+    first_token = re.sub(r'[^\d万]', '', tokens[0]) if tokens else ''
     if '万' in first_token:
         views = float(first_token.replace('万', '')) * 10000
     else:
@@ -50,163 +41,175 @@ def parse_views_and_duration(text):
     return views, duration
 
 
-def parse_duration_seconds(dur_str):
-    """'25:09:32' → 90422秒; '09:32' → 572秒"""
-    if not dur_str:
-        return 0
-    parts = dur_str.split(':')
-    if len(parts) == 3:
-        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-    elif len(parts) == 2:
-        return int(parts[0]) * 60 + int(parts[1])
-    return 0
-
-
-def parse_bilibili_date(date_str, current_date=None):
-    """解析B站相对日期 → datetime对象 + 原始字符串
-    返回 (datetime_obj, display_str)
+def parse_bilibili_date(date_str, current_date=NOW):
+    """Parse Bilibili relative date string → (datetime_obj, display_string).
+    MUST check '分钟前' BEFORE '小时前' — otherwise '1分钟前' matches '1小时前'.
     """
-    if current_date is None:
-        current_date = NOW
     if not date_str:
         return None, None
     date_str = date_str.strip()
-    
-    # 处理分钟级相对时间：'14分钟前', '33分钟前' 等
+
     if '分钟前' in date_str:
-        m = re.search(r'(\d+)', date_str)
-        mins = int(m.group(1)) if m else 0
-        pub_date = current_date - timedelta(minutes=mins)
-        return pub_date, date_str  # 保留原始相对日期字符串用于显示
-    
-    if '小时前' in date_str or date_str == '刚刚':
-        hours = 0
-        if '小时前' in date_str:
-            m = re.search(r'(\d+)', date_str)
-            if m:
-                hours = int(m.group(1))
-        pub_date = current_date - timedelta(hours=hours)
-        return pub_date, date_str
-    
+        try:
+            mins = int(re.search(r'(\d+)', date_str).group(1))
+            pub_date = current_date - timedelta(minutes=mins)
+            return pub_date, date_str
+        except:
+            pass
+
+    if '小时前' in date_str:
+        try:
+            hours = int(re.search(r'(\d+)', date_str).group(1))
+            pub_date = current_date - timedelta(hours=hours)
+            return pub_date, date_str
+        except:
+            pass
+
+    if date_str == '刚刚':
+        return current_date, '刚刚'
     if date_str == '昨天':
-        return current_date - timedelta(days=1), '昨天'
+        pub_date = current_date - timedelta(days=1)
+        return pub_date, '昨天'
     if date_str == '前天':
-        return current_date - timedelta(days=2), '前天'
-    
-    if '-' in date_str and len(date_str) == 5:  # MM-DD
+        pub_date = current_date - timedelta(days=2)
+        return pub_date, '前天'
+
+    # MM-DD format (e.g. "03-17")
+    if re.match(r'^\d{2}-\d{2}$', date_str):
         try:
             m, d = map(int, date_str.split('-'))
-            year = current_date.year if m <= current_date.month else current_date.year - 1
-            return datetime(year, m, d), date_str
+            year = current_date.year
+            pub_date = datetime(year, m, d)
+            return pub_date, date_str
         except:
             return None, date_str
-    
-    if '-' in date_str and len(date_str) == 10:  # YYYY-MM-DD
+
+    # YYYY-MM-DD format
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
         try:
-            return datetime.strptime(date_str, '%Y-%m-%d'), date_str
+            pub_date = datetime.strptime(date_str, '%Y-%m-%d')
+            return pub_date, date_str
         except:
             return None, date_str
-    
+
     return None, date_str
 
 
-def calc_score(views, pub_date, current_date=None, max_views=10_000_000):
-    """综合评分: 播放量对数(50%) + 互动率(35%, 无数据时=0) + 新鲜度(15%)
-    
-    新鲜度7天衰减至0。
+def calc_score(views, pub_date, current_date=NOW, max_views=10_000_000):
+    """Composite score: 0.5 × log10(views) + 0.15 × freshness.
+    Interaction term (likes) = 0 since B站 search pages don't expose likes.
+    Freshness decays linearly over 7 days (168h) to 0.
     """
-    if current_date is None:
-        current_date = NOW
     if pub_date is None:
         return 0
-    
     hours_old = (current_date - pub_date).total_seconds() / 3600
-    if hours_old < 0:
-        hours_old = 0
-    
     freshness = max(1 - hours_old / 168, 0)
     log_score = math.log10(views + 1) / math.log10(max_views)
-    # Interaction = 0 when likes unavailable
     score = 0.5 * log_score + 0.15 * freshness
     return score
 
 
-def parse_video_data(raw_list, current_date=None):
-    """
-    将原始视频数据列表处理为含评分的有序列表。
+def duration_to_sec(d):
+    """Convert B站 duration string (HH:MM:SS or MM:SS) to seconds."""
+    if not d:
+        return 0
+    parts = d.split(':')
+    if len(parts) == 3:
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    elif len(parts) == 2:
+        return int(parts[0]) * 60 + int(parts[2])
+    return 0
+
+
+def process_all(raw_data, meta_data, current_date=NOW, hours_limit=72):
+    """Process raw BV data + metadata into scored/sorted video list.
     
-    raw_list: [{"title": ..., "author": ..., "views_raw": ..., "date_raw": ..., "link": ...}, ...]
-    views_raw: 原始字符串如 "67 15 03:23:15" 或 "稍后再看146019:11"
-    date_raw: B站相对日期字符串
+    raw_data: list of (bv, raw_text) tuples from browser_console a[href*="/video/BV"]
+    meta_data: list of (bv, title, author, date_str) tuples from h3 extraction
+    hours_limit: only include videos published within this many hours (default 72 = 3 days)
     
-    返回: [{"title": ..., "author": ..., "views": int, "views_raw": str,
-            "duration": str, "dur_sec": int, "pub_date": datetime,
-            "date_raw": str, "hours_old": float, "score": float, "link": str}, ...]
+    Returns (long_videos, short_videos) sorted by score descending.
+    Short video = duration <= 300 seconds (5 minutes).
     """
-    if current_date is None:
-        current_date = NOW
-    seen = set()
+    raw_lookup = {bv: raw for bv, raw in raw_data}
+    meta_lookup = {bv: (title, author, date) for bv, title, author, date in meta_data}
+
     videos = []
-    
-    for v in raw_list:
-        bv_match = re.search(r'BV\w+', v.get('link', ''))
-        if not bv_match:
+    for bv in raw_lookup:
+        raw = raw_lookup[bv]
+        if bv not in meta_lookup:
             continue
-        bv = bv_match.group(0)
-        if bv in seen:
+        title, author, date_str = meta_lookup[bv]
+        views, duration = parse_views_and_duration(raw)
+        pub_date, date_display = parse_bilibili_date(date_str, current_date)
+        if pub_date is None:
             continue
-        seen.add(bv)
-        
-        views, duration = parse_views_and_duration(v.get('views_raw', ''))
-        pub_date, date_raw = parse_bilibili_date(v.get('date_raw', ''), current_date)
+        hours_old = (current_date - pub_date).total_seconds() / 3600
+        if hours_old > hours_limit:
+            continue
         score = calc_score(views, pub_date, current_date)
-        hours_old = (current_date - pub_date).total_seconds() / 3600 if pub_date else 999
-        dur_sec = parse_duration_seconds(duration)
-        
+        dur_sec = duration_to_sec(duration)
+        is_short = dur_sec > 0 and dur_sec <= 300
         videos.append({
-            'title': v.get('title', ''),
-            'author': v.get('author', ''),
-            'views': views,
-            'views_raw': v.get('views_raw', ''),
-            'duration': duration,
-            'dur_sec': dur_sec,
+            'bv': bv,
+            'title': title,
+            'author': author,
+            'views': int(views),
+            'date': date_display,
             'pub_date': pub_date,
-            'date_raw': date_raw,
-            'hours_old': hours_old,
             'score': score,
-            'link': v.get('link', ''),
-            'is_short': dur_sec <= 300 if dur_sec > 0 else False,
+            'duration': duration,
+            'is_short': is_short,
+            'url': f'https://www.bilibili.com/video/{bv}'
         })
-    
-    return videos
 
-
-def fmt_views(v):
-    if v >= 10000:
-        return f"{v/10000:.1f}万"
-    return str(int(v))
-
-
-def filter_fresh(videos, hours=168):
-    """只保留7天内（可配置）的内容"""
-    return [v for v in videos if v['hours_old'] <= hours]
-
-
-def sort_and_classify(videos):
-    """返回 (long_videos, short_videos)，各自按score降序"""
     videos.sort(key=lambda x: x['score'], reverse=True)
     long_videos = [v for v in videos if not v['is_short']]
     short_videos = [v for v in videos if v['is_short']]
     return long_videos, short_videos
 
 
-if __name__ == '__main__':
-    # 演示用法
-    test = [
-        {"title": "测试", "author": "UP", "views_raw": "稍后再看67 15 03:23:15", "date_raw": "4小时前", "link": "https://www.bilibili.com/video/BV1p45v6kE2m/"},
-        {"title": "测试2", "author": "UP2", "views_raw": "稍后再看146 0 19:11", "date_raw": "16分钟前", "link": "https://www.bilibili.com/video/BV1fc5q6MEnL/"},
-        {"title": "测试3", "author": "UP3", "views_raw": "稍后再看1.3万250932", "date_raw": "05-05", "link": "https://www.bilibili.com/video/BV1HJRnBaEsd/"},
-    ]
-    parsed = parse_video_data(test)
-    for v in parsed:
-        print(f"[{v['score']:.4f}] {fmt_views(v['views']):>8s} | {v['date_raw']} | {v['duration']} | {v['title']}")
+def format_report(long_videos, short_videos, top_n_long=15, top_n_short=7, top_n_new_long=5, top_n_new_short=3, current_date=NOW):
+    """Format scored video lists into plain-text report string."""
+    lines = []
+
+    lines.append("📺 一、最热门长视频 TOP {}（3天内，综合评分）".format(top_n_long))
+    lines.append("")
+    for i, v in enumerate(long_videos[:top_n_long], 1):
+        title = v['title'][:50] + ('...' if len(v['title']) > 50 else '')
+        lines.append(f"{i}. {title}")
+        lines.append(f"   播放量：{v['views']} | {v['date']} | {v['author']} | 综合评分：{v['score']:.3f} | 时长：{v['duration']}")
+        lines.append(f"   {v['url']}")
+        lines.append("")
+
+    lines.append("📺 二、最热门小视频 TOP {}（3天内，综合评分）".format(top_n_short))
+    lines.append("")
+    for i, v in enumerate(short_videos[:top_n_short], 1):
+        title = v['title'][:50] + ('...' if len(v['title']) > 50 else '')
+        lines.append(f"{i}. {title}")
+        lines.append(f"   播放量：{v['views']} | {v['date']} | {v['author']} | 综合评分：{v['score']:.3f} | 时长：{v['duration']}")
+        lines.append(f"   {v['url']}")
+        lines.append("")
+
+    new_long = sorted(long_videos, key=lambda x: x['pub_date'] or datetime.min, reverse=True)[:top_n_new_long]
+    new_short = sorted(short_videos, key=lambda x: x['pub_date'] or datetime.min, reverse=True)[:top_n_new_short]
+
+    lines.append("📺 三、当日新发热门视频（3天内）")
+    lines.append("")
+    lines.append("### 长视频 TOP {}".format(top_n_new_long))
+    for i, v in enumerate(new_long, 1):
+        title = v['title'][:50] + ('...' if len(v['title']) > 50 else '')
+        lines.append(f"{i}. {title}")
+        lines.append(f"   播放量：{v['views']} | {v['date']} | {v['author']} | 时长：{v['duration']}")
+        lines.append(f"   {v['url']}")
+        lines.append("")
+
+    lines.append("### 短视频 TOP {}".format(top_n_new_short))
+    for i, v in enumerate(new_short, 1):
+        title = v['title'][:50] + ('...' if len(v['title']) > 50 else '')
+        lines.append(f"{i}. {title}")
+        lines.append(f"   播放量：{v['views']} | {v['date']} | {v['author']} | 时长：{v['duration']}")
+        lines.append(f"   {v['url']}")
+        lines.append("")
+
+    return '\n'.join(lines)
