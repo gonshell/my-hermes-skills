@@ -1,0 +1,190 @@
+# 工艺参数表：HB5480-91 合金+状态 → 工艺参数
+# 来源：HB5480-91 表6、表7 及 HB 5446
+# 说明：标准原文给出的是温度范围（530~540），而非±误差
+#       实际控制应理解为：设定值在范围内，控温精度±5°C
+
+metadata:
+  source: "HB5480-91 表6、表7"
+  reference_standard: "HB 5446 铸造铝合金热处理"
+  last_updated: "2026-05-18"
+  note: "表中温度为工艺规范范围，实际控温精度为±5°C"
+
+# ============================================================
+# 固溶处理参数（表6）
+# ============================================================
+solution_parameters:
+  ZL101A:
+    nominal_temp: "530~540°C"    # 标准表6规定范围
+    control_temp: "535°C"          # 控制器设定值（取中值）
+    tolerance: "±5°C"             # 控温精度（炉子精度）
+    time_range: "6~18h"
+    time_note: "按厚度计算，每25mm≥1h，最少6h"
+    quenching: "水淬火"
+    water_temp_limit: "≤40°C"
+    transfer_time_limit: "≤10s"
+    state_after: "T4"
+    application: "一般结构件"
+
+  ZL105A:
+    nominal_temp: "520~530°C"
+    control_temp: "525°C"
+    tolerance: "±5°C"
+    time_range: "6~18h"
+    time_note: "按厚度计算，每25mm≥1h，最少6h"
+    quenching: "水淬火"
+    water_temp_limit: "≤40°C"
+    transfer_time_limit: "≤10s"
+    state_after: "T4"
+    application: "发动机附件"
+
+  ZL114A:
+    nominal_temp: "535~545°C"
+    control_temp: "540°C"
+    tolerance: "±5°C"
+    time_range: "8~20h"
+    time_note: "按厚度计算，每25mm≥1h，最少8h"
+    quenching: "水淬火"
+    water_temp_limit: "≤30°C"   # 注意：ZL114A要求更严
+    transfer_time_limit: "≤8s"   # 注意：ZL114A要求更严（8s，非10s）
+    state_after: "T4"
+    application: "关键受力件"
+
+  ZL205A:
+    nominal_temp: "533~543°C"
+    control_temp: "538°C"
+    tolerance: "±5°C"
+    time_range: "10~18h"
+    time_note: "按厚度计算，每25mm≥1h，最少10h"
+    quenching: "水淬火"
+    water_temp_limit: "≤40°C"
+    transfer_time_limit: "≤10s"
+    state_after: "T4"
+    application: "主承力结构件"
+
+# ============================================================
+# 时效处理参数（表7）
+# ============================================================
+aging_parameters:
+  ZL101A:
+    T5:
+      # 标准表7未列出ZL101A T5，按T6范围参考
+      nominal_temp: "150~160°C"
+      control_temp: "155°C"
+      tolerance: "±5°C"
+      time_range: "需查HB5446"
+    T6:
+      nominal_temp: "150~160°C"
+      control_temp: "155°C"
+      tolerance: "±5°C"
+      time_range: "6~10h"
+      time_note: "标准表7规定"
+      cooling: "空冷"
+      application: "一般结构件"
+    note: "ZL101A主要用于T6状态"
+
+  ZL105A:
+    T6:
+      nominal_temp: "150~160°C"
+      control_temp: "155°C"
+      tolerance: "±5°C"
+      time_range: "10~12h"
+      time_note: "标准表7规定"
+      cooling: "空冷"
+      application: "发动机附件"
+    note: "ZL105A无T5/T7状态"
+
+  ZL114A:
+    T6:
+      nominal_temp: "150~170°C"
+      control_temp: "160°C"
+      tolerance: "±5°C"
+      time_range: "6~10h"
+      time_note: "标准表7规定"
+      cooling: "空冷"
+      application: "关键受力件"
+    note: "ZL114A主要用于T6状态"
+
+  ZL205A:
+    T5:
+      nominal_temp: "150~160°C"
+      control_temp: "155°C"
+      tolerance: "±5°C"
+      time_range: "8~12h"
+      time_note: "标准表7规定"
+      cooling: "空冷"
+      application: "高强度结构件"
+    T6:
+      nominal_temp: "170~180°C"
+      control_temp: "175°C"
+      tolerance: "±5°C"
+      time_range: "3~5h"
+      time_note: "标准表7规定，时效时间较短"
+      cooling: "空冷"
+      application: "主承力结构件"
+    T7:
+      nominal_temp: "见HB5446"
+      control_temp: "见HB5446"
+      tolerance: "见HB5446"
+      time_range: "见HB5446"
+      time_note: "标准表7未规定具体参数，需查HB5446"
+      cooling: "空冷"
+      special_requirement: "热处理后按5.7条检查，应无晶间腐蚀倾向"
+      application: "耐腐蚀结构件"
+    note: "ZL205A是唯一有T5/T6/T7三种状态的合金"
+
+# ============================================================
+# 各合金关键差异速查
+# ============================================================
+alloy_differences:
+  solution_temp_highest: "ZL114A (535~545°C)"
+  solution_temp_lowest: "ZL105A (520~530°C)"
+  aging_temp_different: "ZL205A T6使用170~180°C（其他合金T6用150~170°C）"
+  water_temp_strictest: "ZL114A (≤30°C，其他≤40°C)"
+  transfer_time_strictest: "ZL114A (≤8s，其他≤10s)"
+  highest_strength: "ZL205A T6 (≥450MPa)"
+  only_t5_t6_t7_alloy: "ZL205A"
+
+# ============================================================
+# 工艺参数超标判断基准
+# ============================================================
+overrun_rules:
+  solution_temp_soft:
+    # 超出上限1~10°C：需评估，不一定报废
+    description: "轻微超温"
+    threshold: "超出上限5°C以内"
+    action: "记录，评估组织影响后决定"
+    risk: "可能过烧，强度下降"
+  solution_temp_hard:
+    # 超出上限>10°C：必须报废
+    description: "严重超温（过烧）"
+    threshold: "超出上限>10°C或>550°C"
+    action: "立即停止，批次标记报废"
+    risk: "晶界氧化，强度永久丧失，不可挽救"
+  transfer_time_exceeded:
+    threshold: ">10s（或ZL114A的8s）"
+    action: "降级使用或重新固溶"
+    risk: "冷却太慢，强化相析出，性能下降"
+  water_temp_exceeded:
+    threshold: ">40°C（或ZL114A的30°C）"
+    action: "记录，批次标记，评估影响"
+    risk: "淬火硬度不足"
+  aging_temp_exceeded:
+    threshold: "超出范围"
+    action: "评估对时效效果的影响"
+    risk: "欠时效（太软）或过时效（太脆）"
+
+# ============================================================
+# 检验要求速查
+# ============================================================
+inspection_summary:
+  all_castings:
+    - "每批所有铸件荧光检查（HB5480-91 6.2.2）"
+    - "每批所有铸件外观和尺寸检查（HB5480-91 6.2.5）"
+  mechanical_sample:
+    - "单铸试棒：每个熔炼炉次至少2个（ZL101A/105A/114A符合表3的2级，ZL205A符合HB962）"
+  xray:
+    - "I类：每批所有铸件全面检查"
+    - "II类：头10批全检，之后按表8抽样"
+    - "III/IV类：按表9抽样"
+  intergranular_corrosion:
+    - "仅ZL205A T7需做晶间腐蚀倾向检验（HB5255）"

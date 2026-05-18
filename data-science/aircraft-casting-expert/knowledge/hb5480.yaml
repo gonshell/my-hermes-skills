@@ -1,0 +1,570 @@
+# HB5480-91 结构化知识库
+# 来源：航空航天工业部航空工业标准 HB5480-91《高强度铝合金优质铸件》
+# 版本：1.0
+# 说明：基于原文表格和条款手工提取
+
+metadata:
+  standard: "HB5480-91"
+  title: "高强度铝合金优质铸件"
+  issuer: "航空航天工业部"
+  issued_date: "1991-06-18"
+  effective_date: "1991-10-01"
+  scope: "ZL101A、ZL105A、ZL114A、ZL205A高强度铝合金砂型铸件"
+  excluded: "不适用于压铸件"
+  source_file: "/root/workspace/HB5480-1991_高强度铝合金优质铸件.txt"
+  knowledge_version: "1.0"
+  last_updated: "2026-05-18"
+
+# ============================================================
+# 第一部分：铸件分类与分级（3.1-3.4）
+# ============================================================
+classification:
+  cast_classes:
+    I类:
+      description: "单独破坏将会危及人身安全或引起飞机、导弹和其它装备破坏的铸件"
+      xray_level: ["A", "B"]  # 指定区域
+      xray_level_nonspecified: "C"  # 非指定区域
+    II类:
+      description: "单独破坏将会引起重大操作故障及飞机、导弹和其它装备重要结构失效的铸件"
+      xray_level: "C"  # 指定区域
+      xray_level_nonspecified: "D"  # 非指定区域
+    III类:
+      xray_level_nonspecified: "D"  # 只有非指定区域要求
+
+  xray_grades:
+    A级:
+      usage: "关键部位使用铸件的高应力区域"
+    B级:
+      usage: "关键部位使用铸件的优质级别或安全系数小的铸件指定区域"
+    C级:
+      usage: "一般部位使用铸件的优质级别或安全系数中等的铸件指定区域"
+    D级:
+      usage: "承受低应力的铸件或铸件区域"
+
+  mechanical_levels:
+    designated:
+      # 指定区域力学性能级别
+      levels: [1, 2, 3]
+      marking: "铸件图样上标注1/2/3"
+    nondesignated:
+      # 非指定区域力学性能级别
+      levels: [10, 11, 12]
+      marking: "铸件图样上标注10/11/12"
+
+# ============================================================
+# 第二部分：力学性能要求（表3、表4）
+# ============================================================
+mechanical_properties:
+  designated_area:
+    # 表3：铸件指定区域切取试样的力学性能
+    ZL101A:
+      T6:
+        - level: 1
+          tensile_strength: 260  # MPa，不小于
+          yield_strength: 190    # MPa，不小于
+          elongation: 5         # %，不小于
+        - level: 2
+          tensile_strength: 280
+          yield_strength: 200
+          elongation: 3
+        - level: 3
+          tensile_strength: 310
+          yield_strength: 230
+          elongation: 3
+    ZL105A:
+      T6:
+        - level: 1
+          tensile_strength: 280
+          yield_strength: 210
+          elongation: 3
+        - level: 2
+          tensile_strength: 300
+          yield_strength: 230
+          elongation: 3
+        - level: 3
+          tensile_strength: 340
+          yield_strength: 270
+          elongation: 2
+    ZL114A:
+      T6:
+        - level: 1
+          tensile_strength: 300
+          yield_strength: 240
+          elongation: 3
+    ZL205A:
+      T5:
+        - level: 2
+          tensile_strength: 400
+          yield_strength: 260
+          elongation: 4
+      T6:
+        - level: 1
+          tensile_strength: 420
+          yield_strength: null  # "—" 表示当需方有要求时应测定
+          elongation: 3
+        - level: 2
+          tensile_strength: 450
+          yield_strength: null
+          elongation: 5
+      T7:
+        - level: 2
+          tensile_strength: 430
+          yield_strength: 350
+          elongation: 2
+
+  nondesignated_area:
+    # 表4：铸件非指定区域切取试样的力学性能
+    ZL101A:
+      T6:
+        - level: 10
+          tensile_strength: 260
+          yield_strength: 190
+          elongation: 5
+        - level: 11
+          tensile_strength: 230
+          yield_strength: 180
+          elongation: 3
+        - level: 12
+          tensile_strength: 220
+          yield_strength: 150
+          elongation: 2
+    ZL105A:
+      T6:
+        - level: 10
+          tensile_strength: 280
+          yield_strength: 210
+          elongation: null  # "—"
+        - level: 11
+          tensile_strength: 250
+          yield_strength: 200
+          elongation: null  # "—"
+        - level: 12
+          tensile_strength: 240
+          yield_strength: 190
+          elongation: 1
+    ZL114A:
+      T6:
+        - level: 10
+          tensile_strength: 260
+          yield_strength: 190
+          elongation: 5
+        - level: 11
+          tensile_strength: 280
+          yield_strength: 210
+          elongation: 3
+        - level: 12
+          tensile_strength: 300
+          yield_strength: 240
+          elongation: 3
+    ZL205A:
+      T5:
+        - level: 10
+          tensile_strength: 370
+          yield_strength: 240
+          elongation: 4
+        - level: 11
+          tensile_strength: 350
+          yield_strength: 220
+          elongation: 3.5
+      T6:
+        - level: 10
+          tensile_strength: 420
+          yield_strength: 310
+          elongation: 3
+        - level: 11
+          tensile_strength: 390
+          yield_strength: 290
+          elongation: 2
+      T7:
+        - level: 10
+          tensile_strength: 400
+          yield_strength: 320
+          elongation: 3
+        - level: 11
+          tensile_strength: 370
+          yield_strength: 300
+          elongation: 1.5
+
+# ============================================================
+# 第三部分：化学成分（表5）
+# ============================================================
+chemical_composition:
+  # "是" = 有范围要求，"—" = 无要求（余量或杂质控制）
+  elements:
+    - name: "Cu"
+      ZL101A: 0.10
+      ZL105A: "1.0~1.5"
+      ZL114A: 0.10
+      ZL205A: "4.6~5.3"
+    - name: "Si"
+      ZL101A: "6.5~7.5"
+      ZL105A: "4.5~5.5"
+      ZL114A: "6.5~7.5"
+      ZL205A: 0.06
+    - name: "Fe"
+      ZL101A: 0.20
+      ZL105A: 0.20
+      ZL114A: 0.20
+      ZL205A: 0.15
+    - name: "Mg"
+      ZL101A: "0.25~0.45"
+      ZL105A: "0.40~0.60"
+      ZL114A: "0.45~0.75"
+      ZL205A: 0.05
+    - name: "Mn"
+      ZL101A: 0.10
+      ZL105A: 0.10
+      ZL114A: 0.10
+      ZL205A: "0.3~0.5"
+    - name: "Ti"
+      ZL101A: 0.20
+      ZL105A: 0.20
+      ZL114A: "0.08~0.25"
+      ZL205A: "0.15~0.35"
+    - name: "Cd"
+      ZL101A: "—"
+      ZL105A: "—"
+      ZL114A: "—"
+      ZL205A: "0.15~0.25"
+    - name: "Zr"
+      ZL101A: "—"
+      ZL105A: "—"
+      ZL114A: "—"
+      ZL205A: "0.05~0.20"
+    - name: "V"
+      ZL101A: "—"
+      ZL105A: "—"
+      ZL114A: "—"
+      ZL205A: "0.05~0.30"
+    - name: "B"
+      ZL101A: "—"
+      ZL105A: "—"
+      ZL114A: "—"
+      ZL205A: "0.005~0.06"
+    - name: "Be"
+      ZL101A: "—"
+      ZL105A: "—"
+      ZL114A: 0.07
+      ZL205A: "—"
+    - name: "Zn"
+      ZL101A: 0.10
+      ZL105A: 0.10
+      ZL114A: 0.10
+      ZL205A: "—"
+    - name: "其它元素单个"
+      ZL101A: 0.05
+      ZL105A: 0.05
+      ZL114A: 0.05
+      ZL205A: 0.05
+    - name: "其它元素总量"
+      ZL101A: 0.15
+      ZL105A: 0.15
+      ZL114A: 0.15
+      ZL205A: 0.10
+  note: "除了给出成份范围者外，其余均为最大百分含量"
+
+# ============================================================
+# 第四部分：热处理制度（表6、表7）
+# ============================================================
+# 注意：标准原文表6/表7的温度是范围（530~540），不是±误差
+# 表6 固溶热处理制度
+heat_treatment:
+  solution:
+    ZL101A:
+      temperature_range: "530~540°C"
+      time_range: "6~18h"
+      state: "T4"
+    ZL105A:
+      temperature_range: "520~530°C"
+      time_range: "6~18h"
+      state: "T4"
+    ZL114A:
+      temperature_range: "535~545°C"
+      time_range: "8~20h"
+      state: "T4"
+    ZL205A:
+      temperature_range: "533~543°C"
+      time_range: "10~18h"
+      state: "T4"
+
+  aging:
+    ZL101A:
+      T6:
+        temperature_range: "150~160°C"
+        time_range: "6~10h"
+    ZL105A:
+      T6:
+        temperature_range: "150~160°C"
+        time_range: "10~12h"
+    ZL114A:
+      T6:
+        temperature_range: "150~170°C"
+        time_range: "6~10h"
+    ZL205A:
+      T5:
+        temperature_range: "150~160°C"
+        time_range: "8~12h"
+      T6:
+        temperature_range: "170~180°C"
+        time_range: "3~5h"
+      T7:
+        # 标准表7仅标"-"——见HB5446，本处标注待查
+        temperature_range: "见HB5446"
+        time_range: "见HB5446"
+        note: "ZL205A T7晶间腐蚀检验按5.7条"
+
+  references:
+    - "HB 5446 铸造铝合金热处理"
+    - "HB 5480-91 4.8.1"
+
+# ============================================================
+# 第五部分：缺陷类型及X射线检验等级（表2）
+# ============================================================
+# 表2注释："无" = 该等级铸件不允许存在该类缺陷
+xray_defects:
+  # 缺陷类型 → {底片编号: {厚度范围: 最大允许缺陷个数}}
+  # 注意：表2中裂纹、冷隔、偏析均为"无"——零容忍
+  气孔:
+    film_id: "1.1"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 2
+    thickness_20to50: 5
+    description: "以圆形或长条形、边缘光滑的暗点出现"
+    handling: "拒收或降级（需方同意）"
+    severity_rules:
+      - "当气孔距铸件边缘距离小于缺陷自身最大尺寸两倍时，应拒收"
+      - "两种以上缺陷均等于或接近验收标准时，应拒收"
+    standard_clause: "HB5480-91 5.2, 附录A2.1"
+
+  针孔_圆形:
+    film_id: "1.21"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 3
+    thickness_20to50: 7
+    description: "具有代表性的圆形暗点，相当于微小的孔隙，通常分布于整个铸件"
+    handling: "拒收或降级"
+    standard_clause: "HB5480-91 附录A2.2"
+
+  针孔_长条形:
+    film_id: "1.22"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 3
+    thickness_20to50: 5
+    description: "长条形暗点"
+    handling: "拒收或降级"
+    standard_clause: "HB5480-91 附录A2.2"
+
+  缩孔:
+    film_id: "2.1"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 2
+    thickness_20to50: 3
+    description: "以树枝状、纤维状或锯齿状暗区出现"
+    handling: "拒收"
+    standard_clause: "HB5480-91 5.2.2, 附录A2.3"
+
+  海绵状疏松:
+    film_id: "2.2"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 2
+    thickness_20to50: 3     # 注意：原文表2此处20~50厚度格数据不一致，以原文为准
+    description: "局部花边状或蜂窝状暗区"
+    handling: "拒收"
+    standard_clause: "HB5480-91 附录A2.4"
+
+  夹杂物_较低密度:
+    film_id: "3.11"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 2
+    thickness_20to50: 4
+    description: "可能由于砂子、焊泥、氧化物或浮渣所致"
+    handling: "拒收"
+    standard_clause: "HB5480-91 5.2.3, 附录A2.5"
+
+  夹杂物_较高密度:
+    film_id: "3.12"
+    thickness_6mm: 0       # "无"
+    thickness_6to12: 1
+    thickness_12to20: 2
+    thickness_20to50: 3
+    description: "不同密度的金属所致"
+    handling: "拒收"
+    standard_clause: "HB5480-91 5.2.3, 附录A2.5"
+
+  # 以下为"零容忍"缺陷——表2标注"无"
+  偏析:
+    thickness_6mm: 0       # 无
+    thickness_6to12: 0     # 无
+    thickness_12to20: 0    # 无
+    thickness_20to50: 0    # 无
+    description: "在底片上以不同黑度出现，可解释为与基体金属原子序数不同的元素偏析"
+    handling: "拒收"
+    standard_clause: "HB5480-91 附录A2.6"
+    note: "零容忍缺陷，任何含量均不允许"
+
+  裂纹:
+    thickness_6mm: 0       # 无
+    thickness_6to12: 0     # 无
+    thickness_12to20: 0    # 无
+    thickness_20to50: 0    # 无
+    description: "铸件表面或内部的裂纹"
+    handling: "拒收"
+    standard_clause: "HB5480-91 4.4.1"
+    note: "零容忍缺陷，任何铸件类别均不允许裂纹存在"
+
+  冷隔:
+    thickness_6mm: 0       # 无
+    thickness_6to12: 0     # 无
+    thickness_12to20: 0    # 无
+    thickness_20to50: 0    # 无
+    description: "铸件表面的冷隔缺陷"
+    handling: "拒收"
+    standard_clause: "HB5480-91 4.4.1"
+    note: "零容忍缺陷，表面不允许有冷隔"
+
+# ============================================================
+# 第六部分：表面质量（4.4）
+# ============================================================
+surface_quality:
+  fluorescence:
+    requirement: "铸件表面不允许有裂纹、冷隔和穿透性缺陷"
+    standard_clause: "HB5480-91 4.4.1"
+    other_defects: "是否允许有其它表面缺陷及允许的数量，由供、需双方商定"
+  riser_removal:
+    requirement: "清除浇、冒口后的残留量不应超过设计图样或订货文件规定的高度"
+    standard_clause: "HB5480-91 4.4.2"
+  roughness:
+    requirement: "铸件任何区域的最大表面粗糙度应符合设计图样或订货文件的规定"
+    standard_clause: "HB5480-91 4.4.3"
+    assessment_method: "与GB 6060.1标准样块比较评定"
+
+# ============================================================
+# 第七部分：检验批组成（6.1）
+# ============================================================
+inspection:
+  melting_batch:
+    description: "同一炉熔炼的合金，熔化后大体上连续的短时间（不超过8h）内，作为一个熔炼批（炉次）"
+    sampling: "一批进行一组检验"
+    standard_clause: "HB5480-91 6.1.1"
+
+  casting_batch:
+    description: "由总重量不超过500kg的同样铸件组成一批，一次提交检验"
+    requirements:
+      - "同一炉次的合金浇注"
+      - "同一次热处理"
+      - "同样的铸造工艺生产"
+    standard_clause: "HB5480-91 6.1.2"
+
+  large_castings:
+    description: "浇注重量超过50kg的大铸件"
+    relaxation: "允许不同炉次合金浇注和不同炉次热处理的同样铸件组成一批"
+    standard_clause: "HB5480-91 6.1.3"
+
+# ============================================================
+# 第八部分：取样规程（6.2）
+# ============================================================
+sampling:
+  chemical:
+    method: "炉前制取试样"
+    frequency: "每个熔炼炉次至少制取两个试样"
+    backup: "必要时可从铸件取样分析（检验水平J-1）"
+    standard_clause: "HB5480-91 6.2.1"
+
+  fluorescence:
+    requirement: "每批中所有铸件都应进行荧光检查"
+    standard_clause: "HB5480-91 6.2.2"
+
+  xray:
+    initial_production:
+      # 铸造工艺控制认可后头10批
+      class_I: "每批中所有铸件全面检查"
+      class_II: "每批中所有铸件全面检查"
+      class_III: "按表8规定抽取样件检查"
+      class_IV: "按表9规定抽取样件检查"
+    normal_production:
+      # 连续生产10批证明质量稳定后
+      class_I: "每批中所有铸件全面检查"
+      class_II: "按表9规定抽取样件检查"
+      class_III: "按表9规定抽取样件检查"
+      class_IV: "除非订货文件规定放弃X射线照相检查"
+    standard_clause: "HB5480-91 6.2.3"
+
+  mechanical:
+    initial_production:
+      # 头10批
+      level: "J-3"
+      frequency: "按表10规定的J-3级检查水平抽取样件试验"
+    normal_production:
+      level: "J-2"
+      condition: "连续生产10批力学性能符合要求后"
+    single_cast_bars:
+      # 小铸件
+      frequency: "每个熔炼炉次至少两个单铸试棒"
+      requirement: "单铸试棒应与其所代表的铸件同炉次熔化的合金浇注，并同炉热处理"
+      property_requirement: "ZL101A、ZL105A、ZL114A应符合表3中2级的要求；ZL205A应符合HB 962的要求"
+    standard_clause: "HB5480-91 6.2.4"
+
+  appearance:
+    requirement: "每批中所有铸件应进行外观和尺寸检查"
+    standard_clause: "HB5480-91 6.2.5"
+
+  intergranular_corrosion:
+    # 仅ZL205A T7
+    scope: "ZL205A T7合金铸件"
+    method: "按热处理炉次用拉伸试样或试块进行晶间腐蚀倾向检验"
+    standard_clause: "HB5480-91 6.2.7, HB 5255"
+
+# ============================================================
+# 第九部分：不合格处理与复验（6.3）
+# ============================================================
+nonconformance:
+  mechanical_failure:
+    rule: "任何一个不合格试样所代表的铸件为该项试验不合格铸件"
+    retest_allowed: true
+    retest_conditions:
+      - "允许补充试样（当试验本身出现故障或试样断口存在气孔、夹杂物时）"
+      - "对于每一个不合格试样，允许供方再取两个试样进行复验"
+      - "补充试样和复验试样应邻近原取样部位切取"
+      - "每个复验试样的试验结果都应超过规定的要求"
+      - "两个复验试样和不合格试样试验结果的平均值也应超过规定的要求"
+      - "每个不合格批只允许抽取一次样件进行复验"
+    final_result: "复验结果不合格时，该批铸件应拒收"
+    standard_clause: "HB5480-91 6.3.1"
+
+  other_tests_failure:
+    rule: "在其它抽样试验中，如果有一个样件不符合规定的要求，应对该批铸件中所有的铸件进行检查"
+    standard_clause: "HB5480-91 6.3.2"
+
+  borderline_cases:
+    rule: "处于验收和拒收两可之间的铸件，可以由主管技术人员和需方检验人员，根据其使用要求和其它试验结果酌情验收"
+    standard_clause: "HB5480-91 4.5.5"
+
+# ============================================================
+# 第十部分：焊补与矫正（4.9）
+# ============================================================
+repair_and_correction:
+  welding:
+    requirement: "只有得到需方的书面许可，铸件才能进行焊补"
+    procedure:
+      - "焊补的区域应便于检查"
+      - "焊补后的铸件应通过与未焊补铸件相同的检查"
+      - "焊补应在铸件最终热处理和本标准规定的检查之前完成"
+    standard_clause: "HB5480-91 4.9.1"
+
+  correction:
+    restriction: "没有需方的书面许可，铸件不应在人工时效之后进行机械矫正"
+    allowed_states:
+      - "铸造状态"
+      - "固溶热处理状态"
+    timing: "铸件的矫正应在荧光检查之前完成"
+    standard_clause: "HB5480-91 4.9.2"
+
+  other_treatments:
+    restriction: "如果没有供方的规定，不应对铸件采用浸渗处理、化学处理或上涂料等防漏措施"
+    standard_clause: "HB5480-91 4.9.3"

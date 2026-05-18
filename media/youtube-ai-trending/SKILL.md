@@ -242,19 +242,24 @@ Array.from(document.querySelectorAll('a[href*="/shorts/"]'))
 
 ### 步骤1：Bing视频搜索获取热门AI视频
 ```
-URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+OpenAI
+URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
 ```
 从搜索结果中提取：
 - 视频标题
 - 播放量
 - 发布平台（Bilibili等）
 - 视频URL
+- 上传时间
+
+⚠️ 搜索结果中可能混合抖音/Bilibili等平台内容，播放量为平台侧展示值（非YouTube），且可能含大量短视频（3分钟内）。以Bilibili来源为主。
 
 ### 步骤2：直接从Bilibili AI早报获取完整新闻
 推荐订阅的AI早报UP主（每日更新，质量高）：
 - **苍痕Luca** — AI早报系列，每日更新，覆盖OpenAI/Claude/DeepSeek等全领域
   - https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
 - 典型视频标题格式：`【AI早报 2026-04-25】DeepSeek 开源 1.6T 参数｜OpenAI 发布 GPT-5.5｜Claude Code 质量翻身`
+
+⚠️ **已知问题**：`browser_navigate` 直接访问频道合集页（collectiondetail）无法正确渲染视频列表（返回空内容）。**解决方案**：改用已知有效的最新一期AI早报直接视频URL（如 `https://www.bilibili.com/video/BV1BLoSByEoU/`），页面可正常加载并显示视频描述中的完整新闻列表。
 
 ### 步骤3：从视频描述提取完整新闻
 Bilibili AI早报视频描述包含完整的新闻列表，格式例如：
@@ -275,17 +280,35 @@ Bilibili AI早报视频描述包含完整的新闻列表，格式例如：
 
 ### 已知有效备选URL
 ```
-# Bing视频搜索
-https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+OpenAI
+# Bing视频搜索（推荐加 May/2026 等时间词提高相关性）
+https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
 
-# Bilibili AI早报合集
+# Bilibili AI早报合集（⚠️ 直接访问合集页无法渲染，改用下方直接视频链接）
 https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
 
-# 直接获取最新一期AI早报
+# 最新一期AI早报（直接URL可正常加载，建议从视频页面右侧推荐列表获取当日期号）
 https://www.bilibili.com/video/BV1BLoSByEoU/  (2026-04-25期)
 ```
+
+**如何获取当日期号**：访问一期AI早报视频后，在视频页面下方推荐列表中可见：
+- `「太危险不能公开」的 Claude Mythos 上了 GCP｜AI 对无解题答错｜上海电信 1 元 25 万 Token【AI早报 2026-05-18】`
+- `哈萨比斯晕眩瘫坐，Gemini即将卷土重来 | 5月17日AI日报第398期`
+从中提取当天的视频链接和日期。
 
 ## 飞书推送工作流
 
 定时任务场景下，将数据写入飞书文档并发送通知的完整流程见：
 [`references/youtube-ai-trending-feishu-workflow.md`](references/youtube-ai-trending-feishu-workflow.md)
+
+### 飞书消息发送要点（关键Pitfall）
+
+发送文本消息到群聊时，**必须用 `--text` 而非 `--content`**：
+```bash
+# 错误 ❌ — --content 要求 JSON 格式 {"text":"..."}
+lark-cli im +messages-send --chat-id "oc_xxx" --content "纯文本消息" --msg-type text
+
+# 正确 ✅ — --text 直接接收纯文本
+lark-cli im +messages-send --chat-id "oc_xxx" --text "纯文本消息" --msg-type text
+```
+
+查询群ID：先 `lark-cli im chats list` 获取 bot 所在群列表，取 `chat_id` 字段。

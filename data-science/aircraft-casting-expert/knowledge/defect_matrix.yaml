@@ -1,0 +1,351 @@
+# 缺陷判定矩阵：HB5480-91 缺陷类型 → 判定标准 → 处理方式
+# 来源：HB5480-91 4.4, 4.5, 5.2, 附录A, 表2
+
+metadata:
+  source: "HB5480-91 表2, 4.4, 4.5, 5.2, 附录A"
+  last_updated: "2026-05-18"
+  note: "表2规定为X射线检验评级标准，铸件类别不同允许缺陷数量不同"
+
+# ============================================================
+# 缺陷分类：按严重程度
+# ============================================================
+defect_categories:
+  zero_tolerance:
+    description: "这些缺陷在表2中对应'无'——不允许存在于任何铸件类别中"
+    defects:
+      - "裂纹"
+      - "冷隔"
+      - "偏析"
+    handling: "发现即拒收"
+
+  reject_if_found:
+    description: "这些缺陷一旦被检出，该铸件直接拒收"
+    defects:
+      - "缩孔"
+      - "海绵状疏松"
+      - "夹杂物（任何密度）"
+    handling: "拒收"
+
+  size_based:
+    description: "这些缺陷根据底片评级，按厚度范围对应表2的允许数量判定"
+    defects:
+      - "气孔"
+      - "针孔（圆形/长条形）"
+    handling: "超标则拒收，不超标可接受"
+
+# ============================================================
+# 缺陷详细条目
+# ============================================================
+defects:
+
+  裂纹:
+    zero_tolerance: true
+    description: "铸件表面或内部的裂纹，是最危险的缺陷"
+    symptom_patterns:
+      - "裂纹"
+      - "开裂"
+      - "裂口"
+    detection:
+      - "荧光渗透检验（主要）"
+      - "目视检查（明显裂纹）"
+    standard_clause: "HB5480-91 4.4.1, 5.2"
+    handling: "零容忍，发现即拒收"
+    rationale: "裂纹是应力集中源，在使用中会扩展导致断裂，危及安全"
+    xray_film: "—（目视检验为主）"
+
+  冷隔:
+    zero_tolerance: true
+    description: "金属液两股流未完全熔合，在铸件表面形成线状痕迹或浅裂缝"
+    symptom_patterns:
+      - "冷隔"
+      - "冷纹"
+      - "接缝"
+    detection:
+      - "荧光渗透检验"
+      - "目视检查"
+    standard_clause: "HB5480-91 4.4.1, 5.2"
+    handling: "零容忍，表面不允许有冷隔"
+    rationale: "冷隔处金属未完全熔合，是结构薄弱点"
+    xray_film: "—（表面检验为主）"
+
+  偏析:
+    zero_tolerance: true
+    description: "合金元素分布不均匀，在X射线底片上以不同黑度显示"
+    symptom_patterns:
+      - "偏析"
+      - "成分不均"
+    detection:
+      - "X射线照相"
+      - "化学分析（仲裁）"
+    standard_clause: "HB5480-91 附录A2.6"
+    handling: "零容忍，任何含量均不允许"
+    rationale: "偏析导致局部性能与设计值偏差，可能引发失效"
+    xray_film: "—（表2标注无）"
+
+  缩孔:
+    zero_tolerance: false
+    reject_if_found: true
+    description: "金属凝固收缩时得不到补充，形成树枝状、纤维状或锯齿状孔洞"
+    symptom_patterns:
+      - "缩孔"
+      - "缩松"
+      - "内部疏松"
+    detection:
+      - "X射线照相（主要）"
+      - "金相检验"
+    standard_clause: "HB5480-91 5.2.2, 附录A2.3"
+    handling: "拒收"
+    xray_film: "2.1"
+    film_thickness_6mm: 0
+    film_thickness_6to12: 1
+    film_thickness_12to20: 2
+    film_thickness_20to50: 3
+    note: "任何厚度级别，一旦发现即拒收"
+
+  海绵状疏松:
+    zero_tolerance: false
+    reject_if_found: true
+    description: "局部呈花边状或蜂窝状的疏松区域，组织不致密"
+    symptom_patterns:
+      - "海绵状疏松"
+      - "蜂窝状疏松"
+      - "树枝状疏松"
+    detection:
+      - "X射线照相"
+    standard_clause: "HB5480-91 附录A2.4"
+    handling: "拒收"
+    xray_film: "2.2"
+    film_thickness_6mm: 0
+    film_thickness_6to12: 1
+    film_thickness_12to20: 2
+    film_thickness_20to50: 3
+
+  夹杂物:
+    zero_tolerance: false
+    reject_if_found: true
+    description: "砂子、焊泥、氧化物、浮渣或其他不纯物质混入金属"
+    symptom_patterns:
+      - "夹杂物"
+      - "夹渣"
+      - "异物"
+      - "砂眼"
+    detection:
+      - "荧光渗透检验（表面）"
+      - "X射线照相（内部）"
+    standard_clause: "HB5480-91 5.2.3, 附录A2.5"
+    handling: "拒收"
+    xray_film: "3.11（低密度）/ 3.12（高密度）"
+    film_thickness_6mm: 0
+    film_thickness_6to12: 1
+    film_thickness_12to20: 2
+    film_thickness_20to50: "低密度4/高密度3"
+
+  气孔:
+    zero_tolerance: false
+    reject_if_found: false
+    description: "金属液裹入空气或溶解气体析出，形成圆形或长条形空洞"
+    symptom_patterns:
+      - "气孔"
+      - "针孔"
+      - "表面有孔"
+      - "内部有孔"
+      - "气泡"
+    detection:
+      - "荧光渗透检验（表面）"
+      - "X射线照相（内部）"
+    standard_clause: "HB5480-91 5.2, 附录A2.1"
+    handling: "按尺寸和数量评级，超标则拒收，不超标可接受"
+    xray_film: "1.1"
+    film_thickness_6mm: 0
+    film_thickness_6to12: 1
+    film_thickness_12to20: 2
+    film_thickness_20to50: 5
+    special_rules:
+      - "气孔距铸件边缘距离小于缺陷自身最大尺寸两倍时，应拒收（HB5480-91 4.5.6）"
+      - "两种以上缺陷均等于或接近验收标准时，应拒收（HB5480-91 4.5.3）"
+      - "主要缺陷不明显好于验收标准时，应拒收（HB5480-91 4.5.4）"
+
+  针孔:
+    zero_tolerance: false
+    reject_if_found: false
+    description: "微小的气孔，圆形或长条形，通常遍布于整个铸件区域"
+    symptom_patterns:
+      - "针孔"
+      - "密集小孔"
+      - "微小气孔"
+    detection:
+      - "X射线照相"
+    standard_clause: "HB5480-91 附录A2.2"
+    handling: "按尺寸和数量评级，超标则拒收"
+    xray_film:
+      圆形: "1.21"
+      长条形: "1.22"
+    film_thickness_6mm: 0
+    film_thickness_6to12: "圆形1/长条形1"
+    film_thickness_12to20: "圆形3/长条形3"
+    film_thickness_20to50: "圆形7/长条形5"
+
+# ============================================================
+# 表面质量缺陷（非X射线）
+# ============================================================
+surface_defects:
+  表面裂纹:
+    description: "铸件表面肉眼可见或荧光检验发现的裂纹"
+    handling: "拒收"
+    standard_clause: "HB5480-91 4.4.1"
+    note: "零容忍，不允许任何铸件类别存在"
+
+  表面冷隔:
+    description: "铸件表面的冷隔缺陷"
+    handling: "拒收"
+    standard_clause: "HB5480-91 4.4.1"
+    note: "零容忍，表面不允许有冷隔"
+
+  穿透性缺陷:
+    description: "贯穿铸件壁厚的缺陷"
+    handling: "拒收"
+    standard_clause: "HB5480-91 4.4.1"
+    note: "零容忍"
+
+  浇冒口残留:
+    description: "清除浇、冒口后的残留量超过规定高度"
+    handling: "返工修整"
+    standard_clause: "HB5480-91 4.4.2"
+    resolution: "按设计图样或订货文件规定的高度修整"
+
+# ============================================================
+# 工艺异常（非缺陷，但需记录处理）
+# ============================================================
+process_anomalies:
+
+  温度超标_轻微:
+    description: "固溶或时效温度超出上限1至5摄氏度"
+    symptom_patterns:
+      - "温度偏高"
+      - "炉温超"
+      - "温度到"
+      - "到535度"
+      - "到540度"
+    alloy_specific: true
+    severity: "轻微"
+    action:
+      - "记录超温情况（炉号、温度、持续时间）"
+      - "评估对组织和性能的影响"
+      - "决定是否降级使用"
+    escalation: "轻微，记录后由工艺工程师判断"
+    standard_clause: "HB5480-91 4.8.1, HB 5446"
+
+  温度超标_严重:
+    description: "固溶温度超出上限大于10摄氏度或超过550摄氏度，过烧风险"
+    symptom_patterns:
+      - "严重超温"
+      - "过烧"
+      - "温度过高"
+    severity: "严重"
+    action:
+      - "立即停止该批次"
+      - "标记待评估，不得流入下道工序"
+      - "查明超温原因（传感器故障？设定错误？）"
+      - "由工艺工程师和质检人员共同评估"
+      - "可能结果：降级使用或报废"
+    escalation: "必须上报"
+    standard_clause: "HB5480-91 4.8.1, HB 5446"
+    risk: "过烧导致晶界氧化，强度永久下降，不可挽救"
+
+  保温时间不足:
+    description: "固溶或时效保温时间少于规定下限"
+    symptom_patterns:
+      - "保温时间不够"
+      - "时间太短"
+      - "提前出炉"
+      - "保温不足"
+    severity_soft: "轻微不足（小于30min）记录评估；严重不足（大于1h）返工"
+    standard_clause: "HB5480-91 4.8.1, 表6, 表7"
+
+  淬火转移时间超限:
+    description: "出炉到入水时间超过规定（大于10秒，ZL114A为大于8秒）"
+    symptom_patterns:
+      - "转移时间太长"
+      - "出炉到入水慢"
+      - "淬火延迟"
+    severity: "严重"
+    action:
+      - "记录该批次"
+      - "降级使用或重新固溶处理"
+      - "严禁不做任何标记直接使用"
+    standard_clause: "HB5480-91 4.8.1, HB 5446"
+    risk: "冷却太慢，强化相在转移过程中析出，性能下降"
+
+  水温超标:
+    description: "淬火水槽温度超过规定（大于40摄氏度，ZL114A为大于30摄氏度）"
+    symptom_patterns:
+      - "水温太高"
+      - "水槽温度"
+      - "水温超标"
+    severity: "中等"
+    action:
+      - "记录水温"
+      - "换水或加冰降温后再淬火"
+      - "已淬火的批次标记待评估"
+    standard_clause: "HB5480-91 4.8.1, HB 5446"
+    risk: "淬火硬度不足，材料性能不达标"
+
+# ============================================================
+# 缺陷判定决策树
+# ============================================================
+decision_tree:
+  step1:
+    question: "缺陷是裂纹/冷隔/偏析吗？"
+    yes: "拒收"
+    no: "下一步"
+
+  step2:
+    question: "缺陷是缩孔/海绵状疏松/夹杂物吗？"
+    yes: "拒收"
+    no: "下一步"
+
+  step3:
+    question: "缺陷是气孔/针孔吗？"
+    yes: "按表2评级，尺寸/数量超标则拒收，不超标可接受"
+    no: "其他缺陷需具体分析"
+
+  step4:
+    question: "是表面缺陷（荧光检验发现）还是内部缺陷（X射线发现）？"
+    surface: "荧光渗透检验，按4.4.1判断：裂纹/冷隔/穿透性缺陷拒收；其他由供需双方商定"
+    internal: "X射线照相，按表2评级判断"
+
+  step5:
+    question: "缺陷距边缘距离？"
+    rule: "距离小于缺陷最大尺寸两倍时，即使严重程度不大于验收标准也应拒收"
+    standard_clause: "HB5480-91 4.5.6"
+
+# ============================================================
+# 检验方法选择指南
+# ============================================================
+detection_guide:
+  表面缺陷:
+    preferred_method: "荧光渗透检验（HB/Z61）"
+    reason: "荧光渗透液能渗入表面裂纹，在紫外灯下清晰可见"
+    defects:
+      - "裂纹"
+      - "冷隔"
+      - "气孔（表面）"
+      - "夹杂物（表面）"
+
+  内部缺陷:
+    preferred_method: "X射线照相检验（HB/Z60）"
+    reason: "X射线穿透金属，不同密度物质在底片上形成不同黑度"
+    defects:
+      - "气孔（内部）"
+      - "缩孔"
+      - "海绵状疏松"
+      - "夹杂物（内部）"
+      - "偏析"
+
+  力学性能问题:
+    method: "拉伸试验（GB 228）"
+    reason: "直接测出抗拉强度、屈服强度、伸长率，对照表3表4判定"
+
+  晶间腐蚀仅ZL205AT7:
+    method: "晶间腐蚀倾向测定（HB 5255）"
+    reason: "ZL205A T7有晶间腐蚀敏感性，必须检验"

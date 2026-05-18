@@ -77,3 +77,28 @@ lark-cli drive +delete --file-token "<obj_token>" --type <obj_type> --yes
 1. **确认 owner**：查询 `wiki spaces get_node` 或 `permission.members auth`
 2. **如果 owner 是用户**：告知用户需要自己删除，或将 owner 转为 bot 再操作
 3. **如果 owner 是 bot**：直接执行 delete
+
+## ⚠️ `transfer_owner` CLI 命令 bug（v1.0.19）
+
+`lark-cli drive permission.members transfer_owner` 命令存在参数解析 bug：token 参数无论以何种方式传入（位置参数、`--token` flag、`--params token` 字段），均被忽略并报错 "missing required path parameter: token"。
+
+**解法**：
+
+**方案 1（推荐）**：在飞书文档界面直接操作 → 右上角「···」→「更多」→「转移所有权」
+
+**方案 2**：用 curl 调用 REST API，需自行获取 tenant_access_token：
+```bash
+# 获取 tenant token
+TENANT_TOKEN=$(curl -s -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "app_id=cli_a95529a37f78dbb4&app_secret=$APP_SECRET&grant_type=client_credentials" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['tenant_access_token'])")
+
+# 调用 transfer_owner（转移后保留旧 owner 全部权限）
+curl -s -X POST "https://open.feishu.cn/open-apis/drive/v1/permissions/{token}/members/transfer_owner?type=docx&remove_old_owner=false&old_owner_perm=full_access" \
+  -H "Authorization: Bearer $TENANT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_id":"<open_id>","member_type":"openid"}'
+```
+
+**验证 scope**：`lark-cli auth check --scope "docs:permission.member:transfer"`
