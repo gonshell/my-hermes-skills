@@ -122,7 +122,59 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
 
 ---
 
-## 6. 大段内容用文件引用，不用 heredoc 内联
+## 7. 大段内容用文件引用，不用 heredoc 内联
+
+---
+
+## 8. Mermaid 内容换行太多会导致 whiteboard 解析失败
+
+**问题**：Mermaid 内容中包含大量 `\n` 换行时（如 `--content` 传入格式化后的多行 Mermaid），飞书返回 `2107: Whiteboard content parse failed`。
+
+**场景**：`block_replace` 一个 ASCII 流程图为 Mermaid 时，命令执行失败但不影响文档。
+
+**原因**：飞书 Mermaid 解析器对多行内容处理有路径限制，内容行数过多时报解析失败。
+
+**解法**：压缩为单行或最少换行，或在 `whiteboard` 标签后紧跟一个 `<p>` 占位段：
+
+```xml
+<!-- 推荐：单行 -->
+<whiteboard type="mermaid">flowchart TB\n  A["节点"] --> B["节点"]</whiteboard>
+
+<!-- 次选：多行但行数少（<5行） -->
+<whiteboard type="mermaid">flowchart TB
+  A --> B
+  B --> C</whiteboard>
+```
+
+**经验值**：flowchart 节点定义 3-5 个以内基本安全，序列图（sequenceDiagram）行数多时更容易失败。超过 5 个节点的复杂图，先验证简单版，再逐步添加。
+
+**不阻塞**：whiteboard 解析失败时飞书降级但不报错，`result: "success"` 仍返回，内容变成空白 block。如遇此情况，换用 `<callout>` + 文字描述代替。
+
+---
+
+## 9. `block_insert_after` 依赖已知 block_id，必须先 fetch
+
+**场景**：想在某个章节标题后插入 callout，但不知道该标题的 block_id。
+
+**解法**：先 `docs +fetch --detail with-ids` 获取完整 block 树，从 XML 中用正则提取目标 block 的 id：
+
+```python
+import re, json, subprocess
+
+result = subprocess.run(
+    ['lark-cli', 'docs', '+fetch', '--api-version', 'v2', '--doc', '<doc_id>'],
+    capture_output=True, text=True
+)
+content = json.loads(result.stdout)['data']['document']['content']
+
+# 找到 "01 产品概述" 这个 h2 的 block_id
+match = re.search(r'<h2[^>]*id="([^"]+)"[^>]*>01 产品概述</h2>', content)
+if match:
+    block_id = match.group(1)
+    print(f"目标 block_id: {block_id}")
+```
+
+
 
 **问题**：heredoc 通过管道传 `--content "$(cat << 'EOF' ... EOF)"` 时，shell 会解析 `<>`/`&` 等字符，导致 XML 解析失败。
 

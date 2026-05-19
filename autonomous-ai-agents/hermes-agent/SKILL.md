@@ -10,6 +10,11 @@ metadata:
     homepage: https://github.com/NousResearch/hermes-agent
     related_skills: [claude-code, codex, opencode]
 ---
+references:
+  - references/minimax-provider-debugging.md
+  - references/hermes-home-env.md
+  - references/enterprise-landscape.md
+  - references/cron-run-deliver-pattern.md
 
 # Hermes Agent
 

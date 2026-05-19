@@ -21,6 +21,29 @@ metadata:
 3. **飞书富格式增强**：自动插入 Callout（提示框）、分栏 Grid、待办 Checkbox 等飞书特有块
 4. **一键发布**：调用 `lark-cli docs +create --api-version v2` 创建文档
 
+## 两种创建路径（先判断再行动）
+
+### 路径 A：本地已有 Markdown 文件（大多数真实场景）
+
+用户已准备好本地 `.md` 文件（PRD、设计文档、技术规范），直接用 `--content @file` 一步创建，再逐步美化：
+
+**典型工作流：**
+1. `cd` 到文件所在目录（lark-cli 的 `@filepath` 必须用 CWD 相对路径如 `./file.md`）
+2. `lark-cli docs +create --api-version v2 --doc-format markdown --content @./file.md`
+3. 记录返回的 `document_id`
+4. `lark-cli docs +fetch --detail with-ids` 获取文档 block 结构
+5. 逐步美化：
+   - 开头摘要 → `callout`（`block_replace` 替换原 block）
+   - ASCII 架构/流程图 → `whiteboard type="mermaid"`（`block_replace`）
+   - 章节引导 → `callout`（`block_insert_after` 插入各章节标题 block-id 后）
+   - 文字密集段落 → `table` / `grid` / `callout`
+
+**不需要走四波创作流程。** 内容已在本地文件中，创作已完成，只需要发布 + 美化。
+
+### 路径 B：从零创作（无本地文件）
+
+当用户只有主题/需求描述，没有任何现成文档时，按下方「四波创作流程」从零生成。
+
 ## 何时使用
 
 - 用户说「把这篇 Markdown 发到飞书」「发布博客到飞书」「把 md 转成飞书文档」

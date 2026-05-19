@@ -312,3 +312,21 @@ lark-cli im +messages-send --chat-id "oc_xxx" --text "纯文本消息" --msg-typ
 ```
 
 查询群ID：先 `lark-cli im chats list` 获取 bot 所在群列表，取 `chat_id` 字段。
+
+### lark-cli docs +update 参数说明
+
+```bash
+# 正确 ✅
+lark-cli docs +update --api-version v2 \
+  --doc "TBEddfdvQogBTxx9HArceKmlnYd" \
+  --command append \          # 注意是 --command，不是 --mode
+  --content @./lark_content.xml
+
+# --mode append 是旧版 v1 参数；v2 API 必须用 --command
+```
+
+⚠️ **已知问题（2026-05 亲测）**：`--mode append` 在 v2 API 下报错 `unknown flag`，必须用 `--command append`。
+
+### Shorts 排名说明
+
+⚠️ Shorts 标签页的 `ytd-video-renderer` 渲染结果**按总播放量排序，而非发布时间**。提取的 Shorts TOP 5 通常是发布数月前的爆款内容（如 7-9 个月前的视频仍排第一），不代表近期新发。内容新鲜度参考价值有限。真正的"当天新发热门短视频"建议从长视频搜索页的混合流中过滤 `/shorts/` 链接获取（见 SKILL.md 主文方案 2/3）。
