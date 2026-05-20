@@ -5,6 +5,7 @@
 ### 步骤 0：数据获取（见 SKILL.md 主文）
 - 优先 YouTube browser 提取
 - YouTube 超时 → 切换 Bing视频搜索 + Bilibili AI早报
+- ⚠️ Bilibili AI早报每期 BV号 不同，必须先搜索再点击，不要 hardcode BV号
 
 ### 步骤 1：写入飞书文档
 
@@ -69,4 +70,5 @@ rm -f ./lark_content.xml
 | `--content "@/tmp/xxx"` 报错 | lark-cli 要求相对路径 | 用 `@./filename` |
 | `--content "text"` 报错 | append 模式不用 JSON | 用 `--content @./file` |
 | `--content '{"text":"..."}'` 报错 | 格式问题 | 用 `--text` 传纯文本 |
-| Bilibili 合集页无法渲染 | 页面懒加载/动态渲染 | 改用直接视频URL |
+| Bilibili 合集页无法渲染 | 页面懒加载/动态渲染 | 改用搜索+点击进入视频页 |
+| Bilibili 直接URL访问返回"出错啦!" | bilibili 对直接URL访问有登录态检查 | 先搜索再点击，利用 referrer 头通过检查 |

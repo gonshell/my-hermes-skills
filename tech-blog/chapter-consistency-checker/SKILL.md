@@ -159,3 +159,5 @@ metadata:
 ## 相关文件
 
 - `references/consistency-rules.md` — 各维度详细检查规则和判定标准
+- `references/prose-quality-issues.md` — 段落级质量问题（孤立短段、AI味总结句、突兀收尾句）的识别与修复方法（本次session新建）
+

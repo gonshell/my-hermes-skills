@@ -283,17 +283,21 @@ Bilibili AI早报视频描述包含完整的新闻列表，格式例如：
 # Bing视频搜索（推荐加 May/2026 等时间词提高相关性）
 https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
 
-# Bilibili AI早报合集（⚠️ 直接访问合集页无法渲染，改用下方直接视频链接）
+# Bilibili AI早报合集（⚠️ 直接访问合集页无法渲染视频列表）
 https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
-
-# 最新一期AI早报（直接URL可正常加载，建议从视频页面右侧推荐列表获取当日期号）
-https://www.bilibili.com/video/BV1BLoSByEoU/  (2026-04-25期)
 ```
 
-**如何获取当日期号**：访问一期AI早报视频后，在视频页面下方推荐列表中可见：
-- `「太危险不能公开」的 Claude Mythos 上了 GCP｜AI 对无解题答错｜上海电信 1 元 25 万 Token【AI早报 2026-05-18】`
-- `哈萨比斯晕眩瘫坐，Gemini即将卷土重来 | 5月17日AI日报第398期`
-从中提取当天的视频链接和日期。
+**获取当日期号AI早报的正确方法（重要）**：
+
+⚠️ AI早报视频的 BV号 不是固定的，每期不同。**不要 hardcode BV号**，必须通过搜索获取：
+
+1. 搜索：`https://search.bilibili.com/video?keyword=AI早报+YYYY-MM-DD`（URL编码中文）
+2. 从搜索结果列表中找到对应日期的视频（如 `苍痕Luca · 05-18`）
+3. 点击链接进入视频页面，从页面右侧推荐列表可获取更多当期内容
+
+**备选**：如果知道UP主名称（如 `苍痕Luca`），也可直接搜索 `site:bilibili.com 苍痕Luca AI早报 2026-05-18`
+
+⚠️ **已知问题**：直接 `browser_navigate` 到 bilibili 视频 URL 有时返回"出错啦!"页面，但从搜索结果点击进入则正常。这是因为 bilibili 对直接URL访问有登录态检查，而搜索来源的点击带 referrer 头。
 
 ## 飞书推送工作流
 

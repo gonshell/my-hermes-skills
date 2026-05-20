@@ -86,19 +86,21 @@ lark-cli drive +delete --file-token "<obj_token>" --type <obj_type> --yes
 
 **方案 1（推荐）**：在飞书文档界面直接操作 → 右上角「···」→「更多」→「转移所有权」
 
-**方案 2**：用 curl 调用 REST API，需自行获取 tenant_access_token：
+**方案 2**：用 curl 调用 REST API。凭证从环境变量获取（已在 Hermes Agent 进程环境中）：
 ```bash
-# 获取 tenant token
+# 获取 tenant token（APP_ID 和 APP_SECRET 来自 FEISHU_APP_ID / FEISHU_APP_SECRET 环境变量）
 TENANT_TOKEN=$(curl -s -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "app_id=cli_a95529a37f78dbb4&app_secret=$APP_SECRET&grant_type=client_credentials" \
+  -d "app_id=${FEISHU_APP_ID}&app_secret=${FEISHU_APP_SECRET}&grant_type=client_credentials" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['tenant_access_token'])")
 
 # 调用 transfer_owner（转移后保留旧 owner 全部权限）
-curl -s -X POST "https://open.feishu.cn/open-apis/drive/v1/permissions/{token}/members/transfer_owner?type=docx&remove_old_owner=false&old_owner_perm=full_access" \
+curl -s -X POST "https://open.feishu.cn/open-apis/drive/v1/permissions/<file_token>/members/transfer_owner?type=docx&remove_old_owner=false&old_owner_perm=full_access" \
   -H "Authorization: Bearer $TENANT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"member_id":"<open_id>","member_type":"openid"}'
 ```
+
+> **注意**：`~/.hermes/.env` 文件不存在，不要引用。APP_ID 和 APP_SECRET 已经在进程环境变量中（`FEISHU_APP_ID`、`FEISHU_APP_SECRET`）。
 
 **验证 scope**：`lark-cli auth check --scope "docs:permission.member:transfer"`
