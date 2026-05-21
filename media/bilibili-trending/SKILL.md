@@ -77,29 +77,36 @@ function calculateScore(video) {
 
 ## 推荐：API 直接获取（首选方案）
 
-B站提供公开排行榜 API，可通过 curl 直接获取完整结构化数据，比浏览器抓取更可靠：
+### 方案A（首选）：热门接口 `popular` — 稳定可用
 
-```
-curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+排行榜 API (`ranking/v2`) 在 cron/自动化环境中频繁返回 **-352 限流**，且等待后难以恢复。**热门接口更稳定**：
+
+```bash
+# 每页20条，1-5页共100条（与ranking API数量一致）
+curl -s "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=20&type=hot" \
+  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
   -H "Referer: https://www.bilibili.com/"
 ```
 
-返回字段包括：title、bvid、duration、pubdate、owner(name)、stat(view/danmaku/like)。
+**用法**：翻1-5页取100条，URL参数 `pn={页码}&ps=20`。
+返回字段与 ranking API 相同：title、bvid、duration、pubdate、owner(name)、stat(view/danmaku/like)。
 
-⚠️ 注意：该 API 存在严格频率限制，连续请求会返回 -352 错误。
+### 方案B（备选）：排行榜接口 `ranking/v2`
 
-**最佳实践：**
-1. 每次任务只调用一次 API，解析后缓存在 Python 脚本中处理
-2. 若遇 -352，等待 5 秒后重试一次（通常可恢复）
-3. 请求时附带完整 headers（含 `Origin` 字段）可降低被限流概率：
 ```bash
 curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all" \
   -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
   -H "Referer: https://www.bilibili.com/" \
   -H "Origin: https://www.bilibili.com"
 ```
-4. API 返回 100 条数据，足够覆盖 TOP 15 + TOP 7 需求，无需翻页
+
+⚠️ 注意：该 API 存在严格频率限制，连续请求或 cron 场景下返回 **-352 错误**。实测等待20秒仍无法恢复，不建议作为主要数据源。
+
+**最佳实践：**
+1. 每次任务优先用 `popular` 接口取5页（100条）
+2. 若 `popular` 也失败，再用 `ranking/v2` 作为兜底
+3. 请求间隔 1 秒/页，避免触发限流
+4. 两个接口返回字段一致，处理逻辑可共用
 
 ## 备选：页面URL（浏览器方式，优先级较低）
 
@@ -161,15 +168,28 @@ https://search.bilibili.com/video?keyword=热门&order=pubdate&tids=124
 ## 数据处理参考实现（Python）
 
 ```python
-import subprocess, json, datetime, math
+import subprocess, json, datetime, math, time
 
-cmd = 'curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-  -H "Referer: https://www.bilibili.com/" -H "Origin: https://www.bilibili.com"'
-result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-data = json.loads(result.stdout)
-items = data['data']['list']
+def fetch_bilibili_hot():
+    """获取B站热门视频（popular接口，稳定可用）"""
+    all_items = []
+    for page in range(1, 6):  # 5页共100条
+        cmd = f'curl -s "https://api.bilibili.com/x/web-interface/popular?pn={page}&ps=20&type=hot" \
+          -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+          -H "Referer: https://www.bilibili.com/"'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        data = json.loads(result.stdout)
+        if data.get('code') == 0:
+            all_items.extend(data['data']['list'])
+        time.sleep(1)  # 避免限流
+    # 去重
+    seen, items = set(), []
+    for v in all_items:
+        if v['bvid'] not in seen:
+            seen.add(v['bvid']); items.append(v)
+    return items
 
+items = fetch_bilibili_hot()
 now_ts = datetime.datetime.now().timestamp()
 three_days_ago = now_ts - 3 * 24 * 3600
 
@@ -197,12 +217,16 @@ short_v.sort(key=lambda x: x['_s'], reverse=True)
 
 def fmt_view(n): return f"{n//10000}万" if n >= 10000 else str(n)
 
+# 输出长视频TOP15
 for i, v in enumerate(long_v[:15]):
+    pub_time = datetime.datetime.fromtimestamp(v['pubdate']).strftime('%m-%d %H:%M')
     print(f"{i+1}. {v['title']}")
     print(f"   播放量：{fmt_view(v['stat']['view'])} | 弹幕数：{v['stat']['danmaku']} | UP主：{v['owner']['name']} | 综合评分：{v['_s']:.4f}")
     print(f"   https://www.bilibili.com/video/{v['bvid']}")
 
+# 输出小视频TOP7
 for i, v in enumerate(short_v[:7]):
+    pub_time = datetime.datetime.fromtimestamp(v['pubdate']).strftime('%m-%d %H:%M')
     print(f"{i+1}. {v['title']}")
     print(f"   播放量：{fmt_view(v['stat']['view'])} | UP主：{v['owner']['name']} | 综合评分：{v['_s']:.4f}")
     print(f"   https://www.bilibili.com/video/{v['bvid']}")
@@ -211,9 +235,13 @@ for i, v in enumerate(short_v[:7]):
 ## 已知问题
 
 ### 1. API 频率限制
-- Bilibili 排行榜 API 存在严格限流，连续请求返回 -352
-- 解决：每次任务只调用一次 API；失败则等待数秒后重试
-- 备选：使用 Python 脚本解析页面内容作为兜底
+
+| 接口 | 路径 | 限流严重程度 | 表现 |
+|------|------|-------------|------|
+| 排行榜 | `/x/web-interface/ranking/v2` | **严重** | cron/自动化场景几乎必返回 -352，等待20秒仍无法恢复 |
+| 热门 | `/x/web-interface/popular?type=hot` | 轻微 | 每页间隔1秒翻5页可稳定获取100条数据 |
+
+**结论**：优先使用热门接口作为主要数据源，排行榜接口作为兜底。
 
 ### 2. 浏览器抓取效果有限
 - B站页面严重依赖 JavaScript 动态渲染，browser_snapshot 通常只返回页头/页脚等静态元素
@@ -223,7 +251,7 @@ for i, v in enumerate(short_v[:7]):
 
 ### 3. 小视频数据
 - 小视频（≤60秒）在 API 中可通过 `duration <= 60` 筛选
-- 主排行榜 API 数据足够完整，无需额外请求小视频频道
+- 热门接口返回的小视频数量较少（实测约4条/100条），如需更多小视频需额外从 `tids=124` 搜索接口获取
 
 ### 4. 播放量显示格式
 - B站常用单位：万（1.2万），需按 `×10000` 解析

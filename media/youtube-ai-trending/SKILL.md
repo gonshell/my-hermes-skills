@@ -236,9 +236,11 @@ Array.from(document.querySelectorAll('a[href*="/shorts/"]'))
 
 ## ⚠️ YouTube 不可用时的备选方案
 
-**问题**：YouTube 在某些网络环境下会完全无法访问（`ERR_CONNECTION_TIMED_OUT`），此时需要切换到备选数据源。
+**问题**：YouTube 在某些网络环境下会完全无法访问，此时需要切换到备选数据源。
 
-**备选方案：Bing视频搜索 + Bilibili AI早报**
+**触发条件**：任何导致 YouTube 搜索页无法加载的网络错误都应触发 fallback，包括但不限于 `ERR_CONNECTION_TIMED_OUT`、`ERR_EMPTY_RESPONSE`（本 session 实测）、`ERR_NETWORK_CHANGED` 等。判断标准是 `browser_navigate` 返回 `false`，而不是特定的错误字符串。
+
+**备选方案：Bing视频搜索 + Bilibili 搜索结果页 + Bilibili AI早报**
 
 ### 步骤1：Bing视频搜索获取热门AI视频
 ```
@@ -253,7 +255,31 @@ URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+
 
 ⚠️ 搜索结果中可能混合抖音/Bilibili等平台内容，播放量为平台侧展示值（非YouTube），且可能含大量短视频（3分钟内）。以Bilibili来源为主。
 
-### 步骤2：直接从Bilibili AI早报获取完整新闻
+### 步骤2：Bilibili 搜索结果页（可提取完整数据）✅
+即使 Bilibili 视频播放页返回"出错啦!"，**搜索列表页仍可正常渲染**，可直接提取：
+- 视频标题（含完整新闻关键词）
+- 播放量（如 "3.6万"）
+- 上传者名称（如 "橘鸦Juya"）
+- 相对时间（如 "昨天"、"10小时前"）
+
+URL：`https://search.bilibili.com/video?keyword=AI早报+YYYY-MM-DD`
+
+从搜索结果中提取最多 10 条视频，按播放量排序输出。标题中含 "AI早报" 或 "AI" 的条目优先取当日或昨日更新的内容。
+
+### 步骤3：Bing视频搜索获取热门AI视频
+```
+URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
+```
+从搜索结果中提取：
+- 视频标题
+- 播放量
+- 发布平台（Bilibili等）
+- 视频URL
+- 上传时间
+
+⚠️ 搜索结果中可能混合抖音/Bilibili等平台内容，播放量为平台侧展示值（非YouTube），且可能含大量短视频（3分钟内）。以Bilibili来源为主。
+
+### 步骤4：直接从Bilibili AI早报视频描述提取完整新闻
 推荐订阅的AI早报UP主（每日更新，质量高）：
 - **苍痕Luca** — AI早报系列，每日更新，覆盖OpenAI/Claude/DeepSeek等全领域
   - https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
@@ -261,7 +287,7 @@ URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+
 
 ⚠️ **已知问题**：`browser_navigate` 直接访问频道合集页（collectiondetail）无法正确渲染视频列表（返回空内容）。**解决方案**：改用已知有效的最新一期AI早报直接视频URL（如 `https://www.bilibili.com/video/BV1BLoSByEoU/`），页面可正常加载并显示视频描述中的完整新闻列表。
 
-### 步骤3：从视频描述提取完整新闻
+### 步骤4：直接从Bilibili AI早报视频描述提取完整新闻（需视频页可播放）
 Bilibili AI早报视频描述包含完整的新闻列表，格式例如：
 ```
 📰 新闻：
@@ -275,15 +301,19 @@ Bilibili AI早报视频描述包含完整的新闻列表，格式例如：
 
 ### 备选数据源优先级
 1. YouTube（优先，数据最全面）
-2. Bing视频搜索（YouTube不可用时的次选）
-3. Bilibili AI早报（新闻最完整，可直接提取当日热点）
+2. Bilibili 搜索结果页（YouTube不可用时的首选 — 列表页可正常渲染，数据完整）
+3. Bing视频搜索（次选，混合多平台，质量参差）
+4. Bilibili AI早报（新闻最完整，但依赖视频页可播放）
 
 ### 已知有效备选URL
 ```
+# Bilibili 搜索结果页（推荐首选备选）
+https://search.bilibili.com/video?keyword=AI%E6%97%A9%E6%8A%A5+YYYY-MM-DD
+
 # Bing视频搜索（推荐加 May/2026 等时间词提高相关性）
 https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
 
-# Bilibili AI早报合集（⚠️ 直接访问合集页无法渲染视频列表）
+# ⚠️ 频道合集页已失效 — 直接访问返回空内容，不要使用
 https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947
 ```
 

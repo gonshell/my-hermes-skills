@@ -27,6 +27,7 @@ triggers:
 - **综合评分排序**
 
 ### 3. 当日新发热门视频（3天内）
+- ⚠️ "当日新发" = **3天内发布**，非"今天当天"
 - 长视频 TOP 5：按最新发布排序，筛选播放量较高的
 - 短视频 TOP 3：按最新发布排序
 
@@ -549,4 +550,25 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 5, 16, 21, 0)):
 - `process_all()`: 整合 raw_data + meta_data，输出分组列表（长视频/短视频）
 - `format_report()`: 生成纯文本排行报告
 
+`references/bilibili_processor_ref.md` — 本次 session (2026-05-21) 验证的处理器模板，含完整脚本可直接 copy-paste 使用。
+
 **推荐做法**：将上述函数复制到 `execute_code` 中直接运行，browser_console 只负责提取原始文本。
+
+### ⚠️ CRITICAL: datetime.now() vs 硬编码日期
+
+skill 中的 `NOW = datetime(2026, 5, 10)` **仅作占位符**。cron job 执行时必须用 `datetime.now()` 获得真实当前时间：
+
+```python
+# ✅ 正确：在 cron / execute_code 中使用
+from datetime import datetime
+NOW = datetime.now()  # 自动使用系统时区（Mac = CST UTC+8）
+
+# ❌ 错误：使用 skill 文档中的硬编码日期
+NOW = datetime(2026, 5, 10)  # 会导致所有 "N分钟前" 解析错误
+```
+
+**根因**：cron 以 UTC 执行，而 B站 使用 CST(UTC+8)。当 NOW=UTC 时间时，"1分钟前" 被解析为昨天 → 被 `three_days_ago` 过滤掉 → 当日新发榜单只有1条。
+
+### "当日新发" 的正确含义
+
+skill 中的"当日新发热门"实际 = **3天内发布**，不是"今天当天"。排序逻辑：按发布时间倒序（最新发布的排最前）。
