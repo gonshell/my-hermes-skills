@@ -242,44 +242,38 @@ Array.from(document.querySelectorAll('a[href*="/shorts/"]'))
 
 **备选方案：Bing视频搜索 + Bilibili 搜索结果页 + Bilibili AI早报**
 
-### 步骤1：Bing视频搜索获取热门AI视频
+### 备选方案实施顺序
+
+#### 步骤1：Bing视频搜索（数据有限，作为辅助参考）⚠️
 ```
 URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
 ```
-从搜索结果中提取：
-- 视频标题
-- 播放量
-- 发布平台（Bilibili等）
-- 视频URL
-- 上传时间
+⚠️ Bing视频搜索的 `browser_console` JS 提取几乎无法获取结构化数据（视频项），Bing的视频链接指向外部平台而非站内播放页。**此源数据有限**，主要价值是确认热门话题方向。
 
-⚠️ 搜索结果中可能混合抖音/Bilibili等平台内容，播放量为平台侧展示值（非YouTube），且可能含大量短视频（3分钟内）。以Bilibili来源为主。
+#### 步骤2：Bilibili 搜索结果页（首选备选）✅
+Bilibili 搜索列表页**渲染完整、结构清晰**，是 YouTube 不可用时的最佳数据源。
 
-### 步骤2：Bilibili 搜索结果页（可提取完整数据）✅
-即使 Bilibili 视频播放页返回"出错啦!"，**搜索列表页仍可正常渲染**，可直接提取：
-- 视频标题（含完整新闻关键词）
-- 播放量（如 "3.6万"）
-- 上传者名称（如 "橘鸦Juya"）
-- 相对时间（如 "昨天"、"10小时前"）
+**关键发现（2026-05 实测）**：
+- `browser_console` JS 提取在 Bilibili 搜索页**不工作**（返回导航项等无关元素，Bilibili 用了与 YouTube 不同的渲染机制）
+- `browser_snapshot`（compact 模式）的快照中**已包含完整结构化数据**（标题、频道名、播放量、相对时间），可直接读取
+- 从快照中手动提取数据是**唯一可靠方式**
 
 URL：`https://search.bilibili.com/video?keyword=AI早报+YYYY-MM-DD`
 
-从搜索结果中提取最多 10 条视频，按播放量排序输出。标题中含 "AI早报" 或 "AI" 的条目优先取当日或昨日更新的内容。
+**提取方法**：直接读取 `browser_navigate` 返回的 snapshot，从 `generic > link` 项中提取：
+- 标题：`link` 的 `heading` 子元素或 `textContent`
+- 频道：`link` 的相邻 `link` 项（如 `橘鸦Juya · 05-20`）
+- 播放量/时间：从 `generic` 父级的文本中用正则提取（如 `3.7万 53 07:40` → 播放量3.7万，时长07:40）
 
-### 步骤3：Bing视频搜索获取热门AI视频
-```
-URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
-```
-从搜索结果中提取：
-- 视频标题
-- 播放量
-- 发布平台（Bilibili等）
-- 视频URL
-- 上传时间
+**Bilibili 链接格式**：搜索结果中的 href 是相对路径如 `/video/BVxxx`，必须补全为 `https://www.bilibili.com/video/BVxxx`。
 
-⚠️ 搜索结果中可能混合抖音/Bilibili等平台内容，播放量为平台侧展示值（非YouTube），且可能含大量短视频（3分钟内）。以Bilibili来源为主。
+#### 步骤3：直接从Bilibili AI早报视频描述提取完整新闻（可选增强）
+如果需要更完整的新闻列表，可以尝试进入 AI早报 视频详情页：
+- 搜索：`https://search.bilibili.com/video?keyword=AI早报+YYYY-MM-DD`
+- 从结果列表中找对应日期的视频（如 `苍痕Luca · 05-22`）
+- 点击进入详情页，从页面描述提取完整新闻列表
 
-### 步骤4：直接从Bilibili AI早报视频描述提取完整新闻
+⚠️ **已知问题**：直接 `browser_navigate` 到 bilibili 视频 URL 有时返回"出错啦!"页面，但从搜索结果点击进入则正常。这是因为 bilibili 对直接URL访问有登录态检查，而搜索来源的点击带 referrer 头。
 推荐订阅的AI早报UP主（每日更新，质量高）：
 - **苍痕Luca** — AI早报系列，每日更新，覆盖OpenAI/Claude/DeepSeek等全领域
   - https://space.bilibili.com/3546884010412559/channel/collectiondetail?sid=7968947

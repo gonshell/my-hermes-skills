@@ -44,6 +44,8 @@ lark-cli im chats list
 # 返回 chat_id 字段，如 oc_110e535468b6ffbf7a978eb95b1cd51f
 ```
 
+**已知群ID（本部署）**：`oc_110e535468b6ffbf7a978eb95b1cd51f`（"牧羊的机器人-群01"）
+
 **发送消息**：
 ```bash
 lark-cli im +messages-send \
