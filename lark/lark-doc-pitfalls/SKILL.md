@@ -154,6 +154,105 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
 
 ## 9. `block_insert_after` 依赖已知 block_id，必须先 fetch
 
+---
+
+## 附：飞书 LaTeX 公式渲染规范（来源：feishu-math-rendering）
+
+飞书文档的 LaTeX 渲染基于 KaTeX 子集，存在已知限制。
+
+### ✅ 支持的写法
+- 汉字直接写在公式内：`$E = \{x \mid x 是等腰三角形\}$`
+- 纯 LaTeX 符号：$\sqrt{ab} \leq \frac{a+b}{2}$
+- Unicode 符号在公式内：$180°$, $a \geq b$
+
+### ❌ 不支持的写法
+- **`\text{}`**：不支持 amsmath 的 `\text{}`、`\mbox{}`、`\mathrm{}`
+  - `$\pi \text{ 弧度} = 180°$` → 显示为 `$\pi \text{ 弧度} = 180°$`（原样显示）
+- **后果**：未支持的命令被原样显示，破坏公式可读性
+
+### ✅ 正确写法
+```latex
+% 错误
+$\pi \text{ 弧度} = 180°$
+
+% 正确
+$\pi 弧度 = 180°$
+```
+
+### 修复已有文档（检测 + 替换）
+```python
+import re
+
+# 查找问题模式
+text_issues = re.findall(r'\\text\{[^}]+\}', content)
+space_chinese = re.findall(r'\\ [\u4e00-\u9fff]', content)  # 如 \ 弧度
+
+# 替换
+content = content.replace(r'\text{ 弧度}', ' 弧度')
+content = content.replace(r'\text{或}', '或')
+content = content.replace(r'\text{ 个 }', ' 个 ')
+content = content.replace(r'\ 弧度', '弧度')
+content = content.replace(r'\ 个', '个')
+content = content.replace(r'\ 或', '或')
+
+# 验证无残留
+assert '\\text{' not in content
+assert not re.search(r'\\ [\u4e00-\u9fff]', content)
+```
+
+---
+
+## 附：飞书云文档权限与所有权（来源：lark-drive-permission-owner）
+
+### 核心概念
+
+| 权限操作 | API | 执行主体限制 |
+|----------|-----|-------------|
+| 查询权限 | `permission.members auth` | 任意有权限者 |
+| 授权/添加协作者 | `permission.members create` | owner 或有 `manage_public` 者 |
+| 转移 owner | `permission.members transfer_owner` | **仅 owner** |
+| 删除文档 | `drive +delete` | **仅 owner** |
+
+### Owner 转移的限制
+- Bot 无法将自己设为用户文档的 owner（`permission denied`）
+- Owner 转移只能发生在同一租户内的用户之间
+- 转移后原 owner 可选择保留权限（`old_owner_perm` 参数）
+
+### Wiki 文档的 token 分辨率
+Wiki URL（`/wiki/<node_token>`）**不能**直接作为 file_token 使用：
+```bash
+lark-cli wiki spaces get_node --params '{"token":"<WIKI_NODE_TOKEN>"}'
+# 返回：node.obj_token = 真实文档 token（如 docx）
+```
+
+### Delete 操作要求
+```bash
+lark-cli drive +delete --file-token "<obj_token>" --type <obj_type> --yes
+```
+- **必须使用 `obj_token`（真实文档 token），不是 `node_token`**
+- 执行者必须是文档 owner，否则 `forbidden`
+
+### ⚠️ `transfer_owner` CLI 命令 bug（v1.0.19）
+
+`lark-cli drive permission.members transfer_owner` 命令存在参数解析 bug，所有传参方式均报错 "missing required path parameter: token"。
+
+**workaround**：用 curl 调用 REST API：
+```bash
+TENANT_TOKEN=$(curl -s -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "app_id=${FEISHU_APP_ID}&app_secret=${FEISHU_APP_SECRET}&grant_type=client_credentials" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['tenant_access_token'])")
+
+curl -s -X POST "https://open.feishu.cn/open-apis/drive/v1/permissions/<file_token>/members/transfer_owner?type=docx&remove_old_owner=false" \
+  -H "Authorization: Bearer $TENANT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_id":"<open_id>","member_type":"openid"}'
+```
+
+---
+
+## 10. `block_insert_after` 依赖已知 block_id，必须先 fetch
+
 **场景**：想在某个章节标题后插入 callout，但不知道该标题的 block_id。
 
 **解法**：先 `docs +fetch --detail with-ids` 获取完整 block 树，从 XML 中用正则提取目标 block 的 id：

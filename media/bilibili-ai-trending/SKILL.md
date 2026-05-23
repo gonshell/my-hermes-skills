@@ -411,7 +411,6 @@ https://search.bilibili.com/video?keyword=DeepSeek%20GPT%20Claude%20Qwen%20LLM%2
           views = int(float(first_token)) if first_token else 0
       return views, duration
   ```
-    return views, duration
   ```
 - **重要**：时长 > 24h 意味着B站视频时长格式为 `HH:MM:SS`（可能超过24小时）
 
