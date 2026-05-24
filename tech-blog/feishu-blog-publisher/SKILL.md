@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [feishu, blog, markdown, publisher, lark, docx-xml]
-    related_skills: [lark-doc, lark-whiteboard, pipeline, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, review-checklist-generator]
+    related_skills: [lark-doc, lark-whiteboard, tech-blog, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, review-checklist-generator]
 ---
 
 # 飞书博客发布器（feishu-blog-publisher）
@@ -213,42 +213,29 @@ Markdown:
 
 ### 第五步：发布到飞书
 
+**核心陷阱（必读）**：`--content @file` 和 `--title` 不能同时使用。`--content` 只接受内联字符串，不接受文件路径；`--title` 只在 `--markdown` 模式下有效。
+
+正确做法：用 `--markdown -` 读取 stdin 管道，结合 `--title`：
+
+```bash
+# ✅ 正确：用 stdin 管道传入本地 .md 文件（中文内容正常）
+cd /Users/xiesg/workspace
+cat prompting-playbook-blog.md | lark-cli docs +create --api-version v2 --doc-format markdown --title "文章标题" --markdown -
+
+# ❌ 错误：--content @file 和 --title 同时使用会报 "unknown flag: --new-title" 或 "--content is required"
+lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   # 不支持
+```
+
 **两种内容传递方式：**
 
 | 方式 | 适用场景 | 示例 |
 |------|---------|------|
-| 内联 `--content '<xml>...'` | 短内容（<500字符）、无特殊字符 | 简单骨架、单段追加 |
-| 文件 `--content @./file.md` | **大多数真实场景**：中文、引号、长文本 | 完整章节、含表格/引用的内容 |
-
-```bash
-# 方式A：内联（仅适用于简短、无特殊字符的内容）
-lark-cli docs +create --api-version v2 --content '<title>标题</title><p>简短内容</p>'
-
-# 方式B：@file（推荐，适用于几乎所有真实场景）
-#   ⚠️ 必须是 CWD 相对路径（如 ./file.md），不支持绝对路径
-lark-cli docs +create --api-version v2 --content @./blog-content.xml
-
-# 长文档分批发布（@file 方式）：
-# 1. 将内容写入临时文件（CWD 下）
-# 2. 创建前半部分
-lark-cli docs +create --api-version v2 --content @./part1.md
-# 3. 追加后半部分
-lark-cli docs +update --api-version v2 --doc "{doc_token}" --command append --content @./part2.md
-# 4. 清理临时文件
-```
-
-**Markdown 直发快捷路径**：如果源文件已经是格式良好的 Markdown（无需 XML 转换增强），可以跳过 XML 转换，直接用 `--doc-format markdown`：
-
-```bash
-lark-cli docs +create --api-version v2 --doc-format markdown --content @./final-blog.md
-lark-cli docs +update --api-version v2 --doc "{doc_token}" --command append --doc-format markdown --content @./final-blog-part2.md
-```
+| `--markdown -`（stdin管道） | **大多数真实场景**：本地 `.md` 文件 | `cat file.md \| lark-cli docs +create --api-version v2 --doc-format markdown --title "标题" --markdown -` |
+| `--content '<xml>'` | 短内容（<500字符）、无特殊字符 | 简单骨架、单段追加 |
 
 **长文档策略**：
-- 内容 ≤ 4000 字符 → 一次性 `docs +create`
-- 内容 > 4000 字符 → 先 `docs +create` 创建前半部分，再 `docs +update --command append` 追加后半部分
-- 每批追加后检查返回值，确认 `ok: true`
-- 用 `execute_code` 写临时文件到 CWD，传 `@./filename`，完成后清理
+- 内容 ≤ 4000 字符 → 一次性 `--markdown -` 发布
+- 内容 > 4000 字符 → 先 `--markdown -` 创建骨架，再用 `docs +update --command append` 追加剩余章节
 
 ## 完整示例
 
@@ -347,6 +334,23 @@ lark-cli docs +update --api-version v2 --doc "{doc_token}" --command append --do
 12. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。
 
 13. **read_file 输出的文件含行号前缀**：从 read_file 读取的 `.md` 文件，行首是 `1|` `2|` 格式的行号，不是纯 Markdown。直接写入发布会导致整篇文档都是行号。**必须先 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号**，再写入临时文件。
+
+14. **execute_code 的 read_file 返回值结构与工具不同**：`execute_code` 内部 import 的 `read_file` 返回 `{"content": ..., "total_lines": N}` 是正确的，但当脚本从文件读取时，用 `open(...).read()` 直接读文件内容，**不要**试图用 `read_file` 的返回值字典的 `'content'` 键——`execute_code` 的 `read_file` 是工具不是函数，直接调用 `read_file()` 在脚本中是未定义的。正确做法：
+
+```python
+# ✅ 正确：直接用 open 读文件
+with open('/path/to/file.md', 'r') as f:
+    content = f.read()
+cleaned = re.sub(r'^\s*\d+\|\s*', '', content, flags=re.MULTILINE)
+
+# ❌ 错误：用 hermes_tools.read_file 返回值 .content 键
+# execute_code 中 read_file 是工具（通过 hermes_tools 导入），
+# 返回字典的 'content' 键，但工具本身不在 execute_code 运行时可用
+result = read_file('/path/to/file.md')  # 这会失败！
+content = result['content']  # KeyError
+```
+
+解法：文件 I/O 用原生 Python `open()`/`read()`，不要用 `read_file` 工具的返回值。
 
 ## 验证清单
 

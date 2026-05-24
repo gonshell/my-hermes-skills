@@ -156,6 +156,33 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
 
 ---
 
+## 11. "仅优化图表" → 必须用 XML 格式，不能用 Markdown
+
+**问题**：用户说"仅优化图表/图元"时，Agent 用 Markdown 格式创建文档，被拒绝后重建。
+
+**根因**：Markdown 格式无法表达颜色表头、条件行背景等视觉增强。XML 可以。
+
+**规则**：
+
+| 用户说... | 格式 |
+|---------|------|
+| "创建文档"（neutral） | XML（默认） |
+| "导入这个 .md 文件" | Markdown（用户提供.md） |
+| "仅优化图表/图元" | **XML** |
+| "让表格看起来更好" | **XML** |
+| "只写入内容，不改格式" | Markdown |
+
+**XML 视觉增强能力**：
+- 表格表头：`background-color="light-blue"`
+- 条件行背景：`background-color="light-yellow"` / `"light-gray"`
+- Callout 块、Grid 布局、Checkbox 样式
+
+Markdown 一个都没有。
+
+**不阻塞**：`overwrite` 场景下，即使目标只是"加颜色"，仍然用 XML --command overwrite。Format 选择逻辑不受操作类型影响。
+
+---
+
 ## 附：飞书 LaTeX 公式渲染规范（来源：feishu-math-rendering）
 
 飞书文档的 LaTeX 渲染基于 KaTeX 子集，存在已知限制。

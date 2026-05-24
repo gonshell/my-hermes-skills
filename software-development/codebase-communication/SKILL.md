@@ -35,6 +35,17 @@ When explaining a codebase:
 5. Important design decisions — 关键约束和设计决策
 ```
 
+### User-preferred variant: Concepts → Architecture → Design → Mechanisms
+
+When the user explicitly asks for a structured walkthrough ("从核心概念说起，再说架构、设计理念、工作机制"), use this order instead:
+
+1. **核心概念** — Key entities, identities, terminology (what things *are*)
+2. **系统架构** — Component diagram + layer separation (how things *connect*)
+3. **设计理念** — Why these choices: tradeoffs, constraints, security model (why it's *designed this way*)
+4. **工作机制** — Step-by-step flows for key operations (how things *work in practice*)
+
+This maps to What → Structure → Why → How, which the user finds more natural than the default What → Inventory → Relationships → Flows → Decisions order.
+
 ## What to Include
 
 | Item | Why |

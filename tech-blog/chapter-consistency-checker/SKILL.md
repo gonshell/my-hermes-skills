@@ -6,7 +6,7 @@ author: hermes
 tags: [writing, consistency, editing, chapters, creative]
 metadata:
   hermes:
-    related_skills: [pipeline, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, feishu-blog-publisher, review-checklist-generator]
+    related_skills: [tech-blog, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, feishu-blog-publisher, review-checklist-generator]
 ---
 
 # 多章节一致性检查器

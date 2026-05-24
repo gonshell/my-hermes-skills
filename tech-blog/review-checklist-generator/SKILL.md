@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [审查清单, review, checklist, 多Agent验证, 交叉验证, 技术审查, 编辑审查]
-    related_skills: [requesting-code-review, writing-plans, github-code-review, pipeline, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher]
+    related_skills: [requesting-code-review, writing-plans, github-code-review, tech-blog, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher]
 ---
 
 # 审查清单生成器（Review Checklist Generator）

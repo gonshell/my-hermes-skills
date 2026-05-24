@@ -14,7 +14,7 @@ license: MIT
 metadata:
   hermes:
     tags: [叙事, 创意, 多Agent, 辩论, 放大器, theme-generation]
-    related_skills: [reader-persona-feedback, ideation, pipeline, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
+    related_skills: [reader-persona-feedback, ideation, tech-blog, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
 ---
 
 # Narrative Theme Generator — 多Agent放大器型叙事线生成

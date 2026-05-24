@@ -8,7 +8,7 @@ metadata:
   hermes:
     tags: [writing, style, extraction, voice, analysis, 中文, creative]
     category: creative
-    related_skills: [humanizer, songwriting-and-ai-music, pipeline, reader-persona-feedback, narrative-theme-generator, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
+    related_skills: [humanizer, songwriting-and-ai-music, tech-blog, reader-persona-feedback, narrative-theme-generator, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
 ---
 
 # Writing Style Extractor（写作风格提取器）

@@ -10,7 +10,7 @@ triggers:
   - 文章评审
 metadata:
   hermes:
-    related_skills: [pipeline, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
+    related_skills: [tech-blog, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, feishu-blog-publisher, review-checklist-generator]
 ---
 
 # Reader Persona Feedback — 5角色并行独立反馈框架
@@ -74,7 +74,11 @@ metadata:
 
 **严格规则**：每个角色独立运行，生成反馈时**不得参考其他角色的意见**。
 
-对每个角色执行以下步骤：
+⚠️ **并行数限制**：`max_concurrent_children=3`，5角色需分2批执行：
+- **第一批（3个角色，同时并行）**：资深工程师 + 普通读者 + 技术写作者
+- **第二批（2个角色，串行执行）**：开源社区成员 + 商业决策者
+
+每批子任务通过 `read_file` 读取文章文件（传递绝对路径），在context中注明文件路径而非内嵌全文，避免超出子任务context上限。
 
 1. **角色代入**：以该角色的视角和经验水平阅读全文
 2. **独立评分**：按照该角色关注的维度进行 1-5 分评分
@@ -94,7 +98,7 @@ metadata:
 
 ## delegate_task 并行调用示例
 
-本框架的核心优势在于5个角色可以**完全并行**执行——它们之间没有任何依赖关系。使用 `delegate_task` 可以一次性启动5个独立的子任务，每个子任务扮演一个读者角色。
+本框架设计5个角色，但 `max_concurrent_children=3`，需分2批执行。
 
 ### 调用方式
 
@@ -157,12 +161,12 @@ delegate_task({
 })
 ```
 
-### 关键设计说明
+#### 调用方式（分批执行）
 
-1. **并行无依赖**：5个 task 同时启动，互不等待，互不参考对方结果。这保证了每个角色的独立性和真实性。
-2. **context 包含三要素**：每个 task 的 context 都包含完整的（角色定义 + 反馈模板 + 文章全文），确保子任务无需额外查询即可独立完成。
-3. **汇总在并行之后**：所有5个子任务返回结果后，由主 Agent 执行「阶段三：汇总与冲突分析」，生成评分矩阵、共识区、冲突区和优先级排序。
-4. **变量替换**：`{文章全文内容}`、`{title}`、`{audience}`、`{platform}` 为调用时需替换的变量，从阶段一的输入准备中获取。
+**第一批（3个角色，同时并行）**：资深工程师 + 普通读者 + 技术写作者
+**第二批（2个角色，第一批完成后串行执行）**：开源社区成员 + 商业决策者
+
+每个子任务的context包含：角色定义 + 反馈模板 + 文章文件路径（用read_file读取，不要内嵌全文以免超出context上限）。
 
 ---
 
