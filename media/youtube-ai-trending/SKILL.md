@@ -242,30 +242,32 @@ Array.from(document.querySelectorAll('a[href*="/shorts/"]'))
 
 **备选方案：Bing视频搜索 + Bilibili 搜索结果页 + Bilibili AI早报**
 
-### 备选方案实施顺序
+### 备选方案：Bilibili 搜索结果页（首选） + Bing视频搜索（次选）
 
-#### 步骤1：Bing视频搜索（数据有限，作为辅助参考）⚠️
-```
-URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
-```
-⚠️ Bing视频搜索的 `browser_console` JS 提取几乎无法获取结构化数据（视频项），Bing的视频链接指向外部平台而非站内播放页。**此源数据有限**，主要价值是确认热门话题方向。
-
-#### 步骤2：Bilibili 搜索结果页（首选备选）✅
+#### Bilibili 搜索结果页（首选备选）✅
 Bilibili 搜索列表页**渲染完整、结构清晰**，是 YouTube 不可用时的最佳数据源。
 
 **关键发现（2026-05 实测）**：
-- `browser_console` JS 提取在 Bilibili 搜索页**不工作**（返回导航项等无关元素，Bilibili 用了与 YouTube 不同的渲染机制）
-- `browser_snapshot`（compact 模式）的快照中**已包含完整结构化数据**（标题、频道名、播放量、相对时间），可直接读取
-- 从快照中手动提取数据是**唯一可靠方式**
+- `browser_console` JS 提取在 Bilibili 搜索页**部分有效** — `a[href*="/video/BV"]` 选择器可提取 BV URL 和文本
+- `browser_click` 在 Bilibili 搜索页**不会真正导航**（点击成功但快照仍停留在搜索页）
+- `browser_snapshot`（compact 模式）的快照中**已包含完整结构化数据**（标题、频道名、播放量、相对时间）
+- 从快照中配合 BV 链接 JS 提取是**最可靠方式**
 
-URL：`https://search.bilibili.com/video?keyword=AI早报+YYYY-MM-DD`
+URL：`https://search.bilibili.com/video?keyword=AI+LLM+GPT+Claude+OpenAI+trending+2026`
 
-**提取方法**：直接读取 `browser_navigate` 返回的 snapshot，从 `generic > link` 项中提取：
-- 标题：`link` 的 `heading` 子元素或 `textContent`
-- 频道：`link` 的相邻 `link` 项（如 `橘鸦Juya · 05-20`）
-- 播放量/时间：从 `generic` 父级的文本中用正则提取（如 `3.7万 53 07:40` → 播放量3.7万，时长07:40）
+**BV URL + 标题 JS 提取（实测有效）**：
+```javascript
+Array.from(document.querySelectorAll('a[href*="/video/BV"]'))
+  .map(a => ({href: a.href.split('?')[0], text: a.innerText?.trim() || a.textContent?.trim()}))
+  .filter(v => v.href && v.text && v.text.length > 5 && !v.text.includes('万') && !v.text.includes('://'))
+```
 
-**Bilibili 链接格式**：搜索结果中的 href 是相对路径如 `/video/BVxxx`，必须补全为 `https://www.bilibili.com/video/BVxxx`。
+#### Bing视频搜索（次选）⚠️
+Bing视频搜索的 `browser_console` JS 提取几乎无法获取结构化数据（视频项），Bing的视频链接指向外部平台而非站内播放页。**此源数据有限**，主要价值是确认热门话题方向。
+
+```
+URL: https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+trending+May+2026
+```
 
 #### 步骤3：直接从Bilibili AI早报视频描述提取完整新闻（可选增强）
 如果需要更完整的新闻列表，可以尝试进入 AI早报 视频详情页：

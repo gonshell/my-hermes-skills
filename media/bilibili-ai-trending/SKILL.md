@@ -323,10 +323,27 @@ JSON.stringify(r);
 
 ## ⚠️ Bilibili 不可用时的备选方案
 
-**备选方案：Bing视频搜索**
+### 备选方案：Bing视频搜索 + YouTube AI 热门
+
+**优先备选（YouTube 可用时）**：直接使用 `youtube-ai-trending` skill 的备选数据源逻辑，获取完整的 YouTube AI 热门排行（最热门长视频 TOP 10、最热门短视频 TOP 5、当日新发热门视频）。
+
+**Bilibili 补充（YouTube 不可用时）**：
 ```
-URL: https://www.bing.com/videos/search?q=AI+2026+trending+video+GPT+Claude+Deepseek+Bilibili
+URL: https://search.bilibili.com/video?keyword=AI+LLM+GPT+Claude+OpenAI+trending+2026
 ```
+
+⚠️ **Bilibili 搜索页 `browser_click` 不会真正导航**（点击成功但快照仍停留在搜索页）。所有需要的视频数据（标题、BV URL、播放量、频道、相对时间）已完整呈现在 `browser_navigate` 返回的初始快照中，无需点击进入视频详情页。
+
+**BV URL + 标题 JS 提取（实测有效，2026-05-25 验证）**：
+```javascript
+// 提取所有 BV 视频链接及其文本（播放量/时长/弹幕混合字段）
+Array.from(document.querySelectorAll('a[href*="/video/BV"]'))
+  .map(a => ({href: a.href.split('?')[0], text: a.innerText?.trim() || a.textContent?.trim()}))
+  .filter(v => v.href && v.text && v.text.length > 5 && !v.text.includes('万') && !v.text.includes('://'))
+// 返回示例: [{href:"https://www.bilibili.com/video/BV1orGs6eE2D/", text:"DeepSeek 昨日下午突发故障并迅速恢复【AI 早报 2026-05-25】"}]
+```
+
+⚠️ **关于 `browser_console` JS 提取 Bilibili 的说明**：实测 `a[href*="/video/BV"]` 选择器可以正常提取 BV URL 和文本，但页面结构（`.bili-video-card` / `h3`）的选择器不可靠。推荐用 BV 链接法提取 URL，再用快照中的 heading 元素匹配标题。
 
 ## 🔧 关键发现与故障排除（2026年4月实测）
 

@@ -29,7 +29,43 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command str_replace \
 
 ---
 
-## 2. `--content @<filepath>` 必须用相对路径
+## 2. `<code_block>` 在 `append` 时内容丢失：用 `<pre><code>` 替代
+
+**问题**：写入含代码块的 Markdown 时，用 `<code_block>...</code_block>` 标签，`append` 指令返回 `result: "success"` 但文档中无代码块。API fetch 确认 block 被写入但内容为空。
+
+**根因**：`append`（= `block_insert_after`）在序列化 `code_block` type 时有空内容校验 bug，导致代码块内容被静默丢弃。
+
+| 标签格式 | Feishu Block Type | `append` | `overwrite` |
+|----------|-------------------|----------|-------------|
+| `<code_block>...</code_block>` | `code_block` | ❌ 内容丢失 | ⚠️ 不稳定 |
+| `<pre lang="x"><code>...</code></pre>` | `paragraph`（含 code 内联） | ✅ 正确 | ✅ 正确 |
+
+**解法**：所有代码块都用 `<pre lang="..."><code>...</code></pre>`，不要用 `<code_block>`。
+
+```python
+def md_code_block_to_feishu_xml(code_text: str, lang: str) -> str:
+    escaped = code_text.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
+    if lang:
+        return f'<pre lang="{lang}"><code>\n{escaped}\n</code></pre>'
+    else:
+        return f'<pre><code>\n{escaped}\n</code></pre>'
+```
+
+**验证**：
+```bash
+lark-cli docs +fetch --api-version v2 --doc "<doc_id>" --detail with-ids | python3 -c "
+import sys, json, re; data=json.load(sys.stdin); content=data['data']['document']['content']
+matches=list(re.finditer(r'<pre[^>]*><code>(.*?)</code></pre>', content, re.DOTALL))
+print(f'<pre><code> blocks: {len(matches)}'); [print('Sample:', repr(m.group(1)[:80])) for m in matches[:1]]
+"
+```
+正确写入时 `<pre><code>` 内应含换行符和原始文本，非空。
+
+**来源**：2026-05-25，写入 hiclaw-source-analysis.md（77KB，53 个代码块）时发现。
+
+---
+
+## 4. `--content @<filepath>` 必须用相对路径
 
 **问题**：`--content @/tmp/file.xml` 报错：`--file must be a relative path within the current directory`
 
@@ -42,7 +78,7 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command append \
 
 ---
 
-## 3. 删除文档用通用 API，不是 `docs +delete`
+## 6. 删除文档用通用 API，不是 `docs +delete`
 
 ```bash
 lark-cli api DELETE "/open-apis/drive/v1/files/<token>?type=docx" \
@@ -173,9 +209,31 @@ lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
 | "只写入内容，不改格式" | Markdown |
 
 **XML 视觉增强能力**：
-- 表格表头：`background-color="light-blue"`
-- 条件行背景：`background-color="light-yellow"` / `"light-gray"`
+- 表格表头：`background-color="light-blue"`（或 `#E8F4FD`）
+- 条件行背景：`background-color="light-yellow"` / `"light-gray"` / `"light-green"`
 - Callout 块、Grid 布局、Checkbox 样式
+
+**表格彩色表头标准写法**：
+```xml
+<table>
+  <thead background_color="#E8F4FD">
+    <tr>
+      <th style="background-color:#E8F4FD">列1</th>
+      <th style="background-color:#E8E8E8">列2</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>内容</td>
+      <td>内容</td>
+    </tr>
+    <tr>
+      <td style="background-color:#FFF9E6">高亮行</td>
+      <td>内容</td>
+    </tr>
+  </tbody>
+</table>
+```
 
 Markdown 一个都没有。
 
@@ -274,6 +332,65 @@ curl -s -X POST "https://open.feishu.cn/open-apis/drive/v1/permissions/<file_tok
   -H "Authorization: Bearer $TENANT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"member_id":"<open_id>","member_type":"openid"}'
+```
+
+---
+
+## 9.5 骨架 + 并行 Agent 追加 → 内容重复
+
+**问题**：使用「先 create 骨架（空标题 + 占位描述）→ spawn 并行 Agent 用 append 追加完整内容」模式时，骨架中的占位标题/段落会保留在文档中，与 Agent 追加的正式内容形成重复。
+
+**场景**：`docs +create` 创建含 7 个 h1 标题 + `<p>（占位描述）</p>` 的骨架 → 3 个并行 Agent 各自 `--command append` 追加完整章节 → 文档中出现两套相同标题（一套空壳、一套有内容）。
+
+**解法**（推荐按优先级）：
+1. **骨架只放 title + callout**，不放章节标题。章节标题由第一个 append 的 Agent 写入。这样骨架永远只有 2-3 个 block，不会产生歧义。
+2. 如果必须放章节标题作骨架，在 Agent 全部完成后，用 `docs +fetch --detail with-ids --scope outline` 获取所有 block ID → 定位骨架 block → `--command block_delete` 批量删除（逗号分隔）。
+3. 或直接用 `overwrite` 全文重写（仅当文档无图片/评论等不可重建内容时）。
+
+**批量删除示例**：
+```bash
+# 1. fetch outline 拿到所有 block ID
+lark-cli docs +fetch --api-version v2 --doc "<doc_id>" --detail with-ids --scope outline
+
+# 2. 提取骨架 block ID（第一套重复标题范围的 ID）
+# 3. 批量删除
+lark-cli docs +update --api-version v2 --doc "<doc_id>" --command block_delete \
+  --block-id "id1,id2,id3,...,id42"
+```
+
+---
+
+## 9.6 并行 Agent append → 标题层级嵌套错误
+
+**问题**：多个并行 Agent 各自 `--command append` 追加章节时，飞书将 append 的内容嵌套在当前最后一个 block 的子树中。outline 中 h1 标题显示为前一章的 h2 子节，导致目录结构错误。
+
+**场景**：`docs +create` 写入第一章 → 并行 Agent A append 阶段二（h1）→ 并行 Agent B append 阶段三（h1）→ outline 显示阶段二和阶段三都在阶段一的子树下。
+
+**修复**（推荐按优先级）：
+1. **避免并行 append**：串行 append 或让主 Agent 直接写完整内容，不 spawn 子 Agent。
+2. **overwrite 重建**：`docs +fetch --scope full` 取回全文 → 检查/修正 h1/h2 标签 → `overwrite` 重写。overwrite 会重建 block 树结构，嵌套问题自然消除。Mermaid whiteboard 会产生 `partial_success` 警告（`Whiteboard clone failed`）但不影响内容。
+3. **block_replace 不可靠**：用 block_replace 把 h2 改为 h1 时，飞书会在文档末尾创建新的 h1 block，原位置的 h2 内容不变——两级标题同时存在。
+
+**overwrite 修复示例**：
+```bash
+# 1. 取回全文
+lark-cli docs +fetch --api-version v2 --doc "<doc_id>" --detail simple --scope full > content.json
+
+# 2. 用 Python 修正标签层级后保存
+python3 -c "
+import json, re
+data = json.load(open('content.json'))
+content = data['data']['document']['content']
+# 修正：把嵌套的 h2 改为 h1，h3 改为 h2
+content = content.replace('<h2>阶段二', '<h1>阶段二')
+content = content.replace('<h3>子节', '<h2>子节')
+open('fixed.xml', 'w').write(content)
+"
+
+# 3. overwrite 重写
+cp fixed.xml ./fixed.xml
+lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
+  --content @./fixed.xml
 ```
 
 ---
