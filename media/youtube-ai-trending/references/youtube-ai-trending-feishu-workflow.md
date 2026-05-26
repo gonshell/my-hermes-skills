@@ -13,14 +13,8 @@
 
 **操作命令**：
 ```bash
-# 1. 先将 XML 内容写入本地文件（绝对不能用 /tmp/，要用相对路径）
-cat > ./lark_content.xml << 'EOF'
-<h1>YYYY-MM-DD 20:00</h1>
-<h2>📊 一、最热门长视频 TOP 10</h2>
-...（XML 格式内容）
-EOF
-
-# 2. 追加到飞书文档
+# 1. 用 write_file 工具写入 XML 内容（优于 heredoc/cat，避免 shell 转义问题）
+#    内容中 <>& 字符无需额外处理
 lark-cli docs +update --api-version v2 \
   --doc "TBEddfdvQogBTxx9HArceKmlnYd" \
   --command append \
@@ -35,6 +29,7 @@ lark-cli docs +update --api-version v2 \
 **关键Pitfall**：
 - `--content` 参数在 `append` 模式下**必须是相对路径**（`@./filename`），不能用 `/tmp/xxx`
 - XML 内容中如有 `<`、`>`、`&` 等字符，**不需要额外转义**，直接写入文件即可
+- **不要用 heredoc/cat** 写 XML 文件，shell 会做不必要的转义处理；用 `write_file` 工具直接写入
 
 ### 步骤 2：发送飞书群通知
 

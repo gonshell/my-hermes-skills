@@ -558,20 +558,20 @@ def parse_bilibili_date(date_str, current_date=datetime(2026, 5, 16, 21, 0)):
 
 ## 📁 参考实现
 
-`references/bilibili_processor.py` — 完整的Python处理器，包含：
+`references/bilibili_processor.py` — 完整的Python处理器（2026-05-26验证），包含：
 - `parse_views_and_duration()`: 处理粘连的播放量+时长字段（`"1.3万250932"` → views + duration）
-- `parse_bilibili_date()`: 相对日期解析（昨天、前天、MM-DD、YYYY-MM-DD）
+- `parse_bilibili_date()`: 相对日期解析（昨天、前天、MM-DD、YYYY-MM-DD）；⚠️ `分钟前` 解析必须置于 `小时前` 之前
 - `calc_score()`: 综合评分公式（播放量对数 + 新鲜度，无点赞数据时互动率为0）
 - `duration_to_sec()`: B站时长字符串 → 秒数
-- `process_all()`: 整合 raw_data + meta_data，输出分组列表（长视频/短视频）
-- `format_report()`: 生成纯文本排行报告
+- `process_all()`: 整合 raw_data + meta_data，输出分组列表（长视频/短视频），直接返回排序结果
 
-`references/bilibili_processor_ref.md` — 本次 session (2026-05-21) 验证的处理器模板，含完整脚本可直接 copy-paste 使用。
+**推荐工作流：**
+1. 用 `order=pubdate` + `AI 人工智能` 搜索 → browser_console提取bv+h3元数据 → 滚动 → 再提取
+2. 用 `order=pubdate` + `AI 人工智能 大模型 深度学习` 搜索 → 同样提取
+3. 用 `order=pubdate` + `DeepSeek GPT Claude Qwen LLM 大模型` 搜索 → 同样提取（可选，返回旧视频需过滤）
+4. 在 Python 中按 BV 合并所有 raw_bv_list + meta_list → `process_all()` → 输出报表
 
-**推荐做法**：将上述函数复制到 `execute_code` 中直接运行，browser_console 只负责提取原始文本。
-
-### ⚠️ CRITICAL: datetime.now() vs 硬编码日期
-
+**⚠️ CRITICAL: datetime.now() vs 硬编码日期**
 skill 中的 `NOW = datetime(2026, 5, 10)` **仅作占位符**。cron job 执行时必须用 `datetime.now()` 获得真实当前时间：
 
 ```python
@@ -585,6 +585,4 @@ NOW = datetime(2026, 5, 10)  # 会导致所有 "N分钟前" 解析错误
 
 **根因**：cron 以 UTC 执行，而 B站 使用 CST(UTC+8)。当 NOW=UTC 时间时，"1分钟前" 被解析为昨天 → 被 `three_days_ago` 过滤掉 → 当日新发榜单只有1条。
 
-### "当日新发" 的正确含义
-
-skill 中的"当日新发热门"实际 = **3天内发布**，不是"今天当天"。排序逻辑：按发布时间倒序（最新发布的排最前）。
+**"当日新发" 的正确含义** = **3天内发布**，不是"今天当天"。排序逻辑：按发布时间倒序（最新发布的排最前）。
