@@ -179,13 +179,33 @@ Array.from(document.querySelectorAll('ytd-video-renderer'))
   .slice(0, 10)
 ```
 
-2. **从搜索结果「すべて」标签过滤 Shorts（次选，可能为空）** ⚠️
+1. **搜索结果页「ショート」tab（最可靠）** ✅
+   - 点击页面内 tab 区域的「ショート」tab（ref=e11 附近），而不是顶部导航的「ショート」链接
+   - 点击后会加载 Shorts 内容，仍使用 `ytd-video-renderer` 渲染，可正常提取
+   - 提取JS：
+```javascript
+Array.from(document.querySelectorAll('ytd-video-renderer'))
+  .map(v => {
+    const titleEl = v.querySelector('#video-title');
+    const link = titleEl?.href || '';
+    const isShort = link.includes('/shorts/');
+    return {
+      title: titleEl?.textContent?.trim() || '',
+      link,
+      isShort,
+      metadata: Array.from(v.querySelectorAll('#metadata-line span')).map(s => s.textContent).join(' · ')
+    };
+  })
+  .filter(v => v.title && v.isShort)
+  .slice(0, 10)
+```
+
+2. **从搜索结果「すべて」标签过滤 Shorts（次选，有时为空）** ⚠️
    - 使用主搜索结果页（不过滤Shorts）提取所有 `ytd-video-renderer`
    - 过滤出 `/shorts/` 链接的视频
-   - **已知问题（2026年5月亲测）**：有时「すべて」页面的 `ytd-video-renderer` 元素中完全不包含 `/shorts/` 链接，导致过滤结果为空。此时必须回退到方案1（点击 Shorts tab）
-   - 如果此方案返回非空结果，则一趟搞定长视频+短视频最高效
-   - 点击页面内 tab 区域的「ショート」tab（ref=e11），而不是顶部导航的「ショート」链接
-   - 点击后会加载 Shorts 内容，仍使用 `ytd-video-renderer` 渲染，可正常提取
+   - **2026-05 实测**：有时「すべて」页面的 `ytd-video-renderer` 元素中完全不包含 `/shorts/` 链接，导致过滤结果为空。此时必须回退到方案1（点击 Shorts tab）
+   - **但若返回非空结果，则此方案效率最高** — 可在同一次 JS 提取中同时获得长视频（`!isShort`）和短视频（`isShort`），无需切换 tab
+   - 验证方法：运行 JS 后检查 `filter(v => v.isShort)` 是否返回 ≥3 条；若少于 3 条立即切换方案1
    - 提取JS：
 ```javascript
 Array.from(document.querySelectorAll('ytd-video-renderer'))
