@@ -318,7 +318,26 @@ JSON.stringify(r);
 - `.bili-video-card` 在某些页面状态下可能返回 0 结果
 - 备用方案：使用 `h3` 标签作为标题锚点，配合 `closest('a')` 向上查找链接
 
-## 摘要生成
+## 飞书推送工作流
+
+定时任务场景下，将数据写入飞书文档并发送通知的完整流程见：
+[`references/bilibili-ai-trending-feishu-workflow.md`](references/bilibili-ai-trending-feishu-workflow.md)
+
+**当前实现逻辑（2026-05 改造）**：
+1. 读取文档现有内容（`lark-cli docs +fetch --api-version v2 --doc "token"`）
+2. 过滤 >7 天的旧段落，保留最近 7 天内容
+3. 拼接：保留内容 + 今日新内容
+4. 整体 overwrite 写入文档
+5. **成功时静默，仅出错时输出告警格式（cron 自动送达本聊天窗口）**
+
+**通知目标**：本聊天窗口 `oc_de41dc899cd2e0f9afad7dddb8fa1e89`，由 cron 自动送达，不需要手动调用 lark-cli 发送消息。
+
+### lark-cli 命令行要点（实测 2026-05 纠错）
+- `+fetch` 正确：`lark-cli docs +fetch --api-version v2 --doc "token"`（不是 `--doc-token`）
+- `+update overwrite` 正确：`lark-cli docs +update --api-version v2 --doc "token" --command overwrite --content @./filename`（`--command` 不是 `--mode`；`@./` 相对路径不是 `@/tmp/`）
+- `--content @./filename` 中 `@./` 必须是**相对路径**，不能是 `/tmp/xxx` 等绝对路径
+
+### 飞书消息发送要点（关键Pitfall）
 根据视频标题和描述生成2-3句话的简单摘要，说明视频主要内容。
 
 ## ⚠️ Bilibili 不可用时的备选方案

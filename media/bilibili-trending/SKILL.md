@@ -232,6 +232,18 @@ for i, v in enumerate(short_v[:7]):
     print(f"   https://www.bilibili.com/video/{v['bvid']}")
 ```
 
+## 飞书推送工作流
+
+定时任务场景下，将数据写入飞书文档并发送通知的完整流程见：
+[`references/bilibili-trending-feishu-workflow.md`](references/bilibili-trending-feishu-workflow.md)
+
+**当前实现逻辑（2026-05 改造）**：
+1. 读取文档现有内容（`lark-cli docs +fetch --api-version v2 --doc "token"`）
+2. 过滤 >7 天的旧段落，保留最近 7 天内容
+3. 拼接：保留内容 + 今日新内容
+4. 整体 overwrite 写入文档
+5. **成功时静默，仅出错时输出告警格式（cron 自动送达本聊天窗口）**
+
 ## 已知问题
 
 ### 1. API 频率限制

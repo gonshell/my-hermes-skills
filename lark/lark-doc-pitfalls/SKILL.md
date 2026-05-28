@@ -15,7 +15,7 @@ metadata:
 
 ---
 
-## 1. `overwrite` 会清空文档且必须传 `--content`
+## 1. `overwrite` 会清空文档且必须传 `--content`</h1>
 
 **问题**：`overwrite` 必须传 `--content` 参数，即使只想改标题，传入空字符串会把文档内容全部清空。
 
@@ -26,6 +26,37 @@ metadata:
 lark-cli docs +update --api-version v2 --doc "<doc_id>" --command str_replace \
   --pattern "<title>旧标题</title>" --content "<title>新标题</title>"
 ```
+
+---
+
+## 1b. `overwrite` + Markdown 内容必须带 `--doc-format markdown`（否则内容不生效）</h2>
+
+**问题**：`overwrite` 时传入 Markdown 格式内容但未加 `--doc-format markdown`，API 返回 `result: "partial_success"` + warning `"Instruction produced no document changes"`，文档内容**完全不更新**。
+
+**场景**：cron 定时任务写入每日热门视频到飞书文档，使用：
+```bash
+lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
+  --content @./lark_content.md   # ❌ 缺少 --doc-format markdown
+```
+→ 返回 `result: "partial_success"`，文档内容毫无变化。
+
+**根因**：`overwrite` 默认按 XML 格式解析传入的 Markdown 内容，解析失败时静默降级但不报错。
+
+**正确做法**：**所有 `overwrite` / `append` 等整段写入指令，当内容是 Markdown 格式时，必须显式指定 `--doc-format markdown`**：
+
+```bash
+# ✅ Markdown 内容写入
+lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
+  --doc-format markdown --content @./lark_content.md
+
+# ✅ XML 内容写入（默认，可省略 --doc-format xml）
+lark-cli docs +update --api-version v2 --doc "<doc_id>" --command overwrite \
+  --content @./lark_content.xml
+```
+
+**经验值**：只要 content 文件以 `.md` 结尾，一律加 `--doc-format markdown`；以 `.xml` 结尾则用默认 XML（可不写 `--doc-format`）。`str_replace` 因为是行内替换不受此影响。
+
+**来源**：2026-05-28，cron 任务「每日AI热门视频推送(晚)」写入 lark_content.md 时发现。
 
 ---
 
@@ -418,6 +449,33 @@ if match:
 ```
 
 
+
+## 12. `docs +create --title` 必须同时传 `--content`
+
+**问题**：`lark-cli docs +create --api-version v2 --title "新文档标题"` 报错：
+```
+{"ok": false, "error": {"type": "validation", "message": "--content is required"}}
+```
+
+**根因**：`+create` 的 `--title` 只是辅助参数，不承担内容填充职责；必须同时传 `--content`。
+
+**解法**：传一个最小内容（Markdown `# 标题` 或 XML `<title>标题</title>`）：
+```bash
+# 正确 ✅
+lark-cli docs +create --api-version v2 \
+  --title "每日Bilibili AI热门视频推送" \
+  --content @./content.md
+
+# content.md 内容（Markdown 格式示例）：
+# # 每日Bilibili AI热门视频推送
+```
+
+**复用场景**：批量创建飞书文档时，先准备好 title + content.md 文件，然后：
+```bash
+lark-cli docs +create --api-version v2 --title "文档标题" --content @./content.md -q '.data.document.document_id'
+```
+
+---
 
 **问题**：heredoc 通过管道传 `--content "$(cat << 'EOF' ... EOF)"` 时，shell 会解析 `<>`/`&` 等字符，导致 XML 解析失败。
 

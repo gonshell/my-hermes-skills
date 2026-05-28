@@ -19,6 +19,11 @@ metadata:
 > 适用：数字出版的 PDF（如机械工业出版社等正规出版物的数字版）
 > 工具：pdftotext（poppler-utils）
 > 已知问题：PDF 分页符 `\x0c` 打乱章节标题、目录页干扰正文、表格数据不适合作 QA
+
+### 模式 C：macOS 图片型 PDF（Vision OCR，无需 tesseract）
+> 适用：macOS 系统 + 图片型 PDF（pdftotext 无文本）+ 未安装 tesseract
+> 工具：Swift Vision framework + PyMuPDF
+> 详见 `references/macos-vision-ocr.md` — 含完整 Swift 源码和批量脚本
 # PDF to Q&A CSV Pipeline
 
 Convert a Chinese PDF standard document (with terminology definitions) into structured Q&A training pairs via OCR.
@@ -340,3 +345,4 @@ print(Counter(r['type'] for r in all_rows))
 | QA 块边界切断句子 | 固定字符数截断 | 截断到最后一个 `\n` 之前 |
 | 大量表格数据（不适合作 QA） | 手册含热工参数表 | LLM 阅读时自行过滤 |
 | 章节名称不一致 | 不同子任务输出格式不同 | 合并后统一映射 |
+| vision_analyze 看不到 browser 加载的图片 | 浏览器工具无法传递图片到 vision 模型 | 见 `references/macos-vision-ocr.md` 的 vision_analyze 说明 |

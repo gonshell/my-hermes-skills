@@ -1,71 +1,74 @@
 # YouTube AI 热门视频 — 飞书推送工作流
 
+## 文档信息
+**文档 token**：`TBEddfdvQogBTxx9HArceKmlnYd`
+**文档标题**：每日AI热门视频推送
+
 ## 完整步骤
 
 ### 步骤 0：数据获取（见 SKILL.md 主文）
 - 优先 YouTube browser 提取
-- YouTube 超时 → 切换 Bing视频搜索 + Bilibili AI早报
-- ⚠️ Bilibili AI早报每期 BV号 不同，必须先搜索再点击，不要 hardcode BV号
 
-### 步骤 1：写入飞书文档
+**⚠️ 重要**：YouTube 不可访问时直接报错，**不使用任何备选数据源**。输出告警格式后直接结束任务，不写入任何数据。
+
+### 步骤 1：写入飞书文档（保留7天逻辑）
 
 **文档 token**：`TBEddfdvQogBTxx9HArceKmlnYd`（固定值，直接使用）
 
-**操作命令**：
-```bash
-# 1. 用 write_file 工具写入 XML 内容（优于 heredoc/cat，避免 shell 转义问题）
-#    内容中 <>& 字符无需额外处理
-lark-cli docs +update --api-version v2 \
-  --doc "TBEddfdvQogBTxx9HArceKmlnYd" \
-  --command append \
-  --content @./lark_content.xml
+**操作流程**：
+
+```
+1. 读取文档现有内容
+   lark-cli doc +get-content --doc-token "TBEddfdvQogBTxx9HArceKmlnYd"
+
+2. 解析内容，过滤掉 >7 天的旧段落
+   - 用 Python 解析文档文本，识别日期标记（如 YYYY-MM-DD 或 MM-DD 格式）
+   - 过滤掉早于 7 天前的条目
+
+3. 拼接：保留内容 + 今日新内容
+
+4. 整体 overwrite 写入
+   lark-cli doc +overwrite --doc-token "TBEddfdvQogBTxx9HArceKmlnYd" --content @./output.xml --doc-format xml
 ```
 
-**成功响应**：
-```json
-{"ok": true, "data": {"result": "success", ...}}
+**注意**：
+- `--content` 必须用相对路径 `@./filename`
+- overwrite 模式下用 `--command overwrite`（不是 `--mode`）
+- XML 中 `<>&` 字符无需额外转义
+- 成功时不发任何通知（静默）
+
+### 步骤 2：发送通知（仅出错时）
+
+告警格式（cron 自动送达本窗口）：
+```
+🚨 定时任务执行出错
+
+📌 任务：每日AI热门视频推送(早/晚)
+⏰ 时间：<当前时间，格式如 2026-05-28 20:00:00>
+❌ 阶段：<获取数据/读取文档/写入文档/未知>
+📝 错误：<具体错误描述>
 ```
 
-**关键Pitfall**：
-- `--content` 参数在 `append` 模式下**必须是相对路径**（`@./filename`），不能用 `/tmp/xxx`
-- XML 内容中如有 `<`、`>`、`&` 等字符，**不需要额外转义**，直接写入文件即可
-- **不要用 heredoc/cat** 写 XML 文件，shell 会做不必要的转义处理；用 `write_file` 工具直接写入
-
-### 步骤 2：发送飞书群通知
-
-**查找群ID**：
-```bash
-lark-cli im chats list
-# 返回 chat_id 字段，如 oc_110e535468b6ffbf7a978eb95b1cd51f
-```
-
-**已知群ID（本部署）**：`oc_110e535468b6ffbf7a978eb95b1cd51f`（"牧羊的机器人-群01"）
-
-**发送消息**：
-```bash
-lark-cli im +messages-send \
-  --chat-id "oc_xxx" \
-  --text "📺 每日AI热门视频推送（晚）
-✅ 内容已写入《每日AI热门视频推送》
-📅 YYYY-MM-DD 20:00
-🔗 https://zt854jxlft.feishu.cn/docx/TBEddfdvQogBTxx9HArceKmlnYd" \
-  --msg-type text
-```
-
-⚠️ **必须用 `--text` 而非 `--content`**：前者接收纯文本，后者要求 JSON 格式 `{"text":"..."}`。
+通知目标：本聊天窗口（`oc_de41dc899cd2e0f9afad7dddb8fa1e89`），由 cron 自动送达，无需手动发送。
 
 ### 步骤 3：清理临时文件
 
 ```bash
-rm -f ./lark_content.xml
+rm -f ./output.xml
 ```
+
+## 通知策略
+
+| 状态 | 行为 |
+|------|------|
+| 成功 | 静默，不发任何消息 |
+| 出错 | 输出告警格式，cron 自动送达本窗口 |
 
 ## 关键Pitfall汇总
 
 | 问题 | 原因 | 解法 |
 |------|------|------|
 | `--content "@/tmp/xxx"` 报错 | lark-cli 要求相对路径 | 用 `@./filename` |
-| `--content "text"` 报错 | append 模式不用 JSON | 用 `--content @./file` |
-| `--content '{"text":"..."}'` 报错 | 格式问题 | 用 `--text` 传纯文本 |
-| Bilibili 合集页无法渲染 | 页面懒加载/动态渲染 | 改用搜索+点击进入视频页 |
-| Bilibili 直接URL访问返回"出错啦!" | bilibili 对直接URL访问有登录态检查 | 先搜索再点击，利用 referrer 头通过检查 |
+| `--command overwrite` 误写成 `--mode` | v2 API 用 --command | 必须用 --command |
+| YouTube 不可访问时自动切换 Bilibili | Skill 中有备选方案章节 | 已删除备选方案，YouTube 不可用直接报错 |
+| `lark-cli docs +fetch` 用错子命令 | 正确命令是 `doc +get-content` | 注意 `doc` vs `docs` 区分 |
