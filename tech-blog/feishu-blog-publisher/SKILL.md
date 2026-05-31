@@ -230,10 +230,15 @@ lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   #
 
 | 方式 | 适用场景 | 示例 |
 |------|---------|------|
-| `--markdown -`（stdin管道） | **大多数真实场景**：本地 `.md` 文件 | `cat file.md \| lark-cli docs +create --api-version v2 --doc-format markdown --title "标题" --markdown -` |
-| `--content '<xml>'` | 短内容（<500字符）、无特殊字符 | 简单骨架、单段追加 |
+| `--new-title "$(head -1 {file} \| sed 's/^# //')" --content @file` | **推荐**：本地 `.md` 文件，第一行是 `# 标题` | 自动从文件第一行提取标题，不会出现"Untitled" |
+| `--markdown -`（stdin管道）+ `--title "标题"` | 无本地文件、Markdown 内容在变量中 | `cat file.md \| lark-cli docs +create --api-version v2 --doc-format markdown --title "标题" --markdown -` |
 
-**长文档策略**：
+**关于 `--title` 的误解澄清：**
+- ❌ `--title` 不能与 `--content @file` 同时使用（会报 "unknown flag: --new-title" 或 "content is required"）
+- ✅ `--new-title` 可以与 `--content @file` 同时使用 — 它从文件内容的第一行提取标题（需要文件第一行是 `# 标题` 格式）
+- ✅ `--title` 只在 `--markdown -`（stdin 模式）下有效，用于显式指定标题字符串
+
+**长文档策略：**
 - 内容 ≤ 4000 字符 → 一次性 `--markdown -` 发布
 - 内容 > 4000 字符 → 先 `--markdown -` 创建骨架，再用 `docs +update --command append` 追加剩余章节
 
@@ -313,7 +318,7 @@ lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   #
 
 2. **行内样式嵌套顺序错误**：飞书要求 `<a> → <b> → <em> → <del> → <u> → <code> → <span>` 的固定嵌套顺序，关闭顺序必须严格反转。顺序错误会导致样式丢失或渲染异常。
 
-3. **Mermaid 语法未验证**：生成的 Mermaid 内容必须语法正确，建议在生成后做基本语法检查（括号匹配、箭头语法 `-->`、`->>` 等）。错误的 Mermaid 会导致画板创建失败。
+4. **博客文件必须有标题字段**：本地博客草稿文件（如 `ai-school-blog-draft.md`）的第一行必须是 Markdown 标题（`# 标题文本`），发布命令用 `--new-title` 参数提取标题：`-new-title "$(head -1 {file} | sed 's/^# //')"`。如果文件第一行不是 `# 标题` 格式，文档在飞书中会显示为"Untitled"。生成后立即用 `head -1 {file}` 验证。
 
 4. **Callout 内放了不支持的子块**：Callout 子块仅支持文本、标题、列表、待办、引用。不要在 Callout 内放 `<table>`、`<pre>`、`<whiteboard>` 等。
 
@@ -328,6 +333,8 @@ lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   #
 9. **颜色使用不合规**：飞书美化系统仅支持特定命名色（gray/red/orange/yellow/green/blue 及其 light-/medium- 变体）。不要使用 `#RRGGBB` 或随意命名色。
 
 10. **@file 路径必须是 CWD 相对路径**：`--content @./file.md` 中的路径必须是当前工作目录的相对路径（`./file.md`），传绝对路径（`/Users/.../file.md`）会报 `unsafe file path` 错误。解法：先 `execute_code` 把文件写到 CWD，或 `cd` 到文件所在目录。
+
+11. **标题丢失陷阱（"Untitled"）**：当使用 `--content @file.md` 时，飞书从文件内容提取标题（取 Markdown 第一个 `# 标题` 或 XML `<title>` 标签）。如果源文件第一行不是标题行（如直接是正文段落），创建的文档会显示为"Untitled"。**发布前必须验证**：用 `head -1 {file}` 检查文件第一行是否是 `# ` 开头。不是的话先用 `execute_code` 在文件头部插入一行 `# 文档标题` 再发布。
 
 11. **lark-cli 可能不在 PATH 中**：如果 `lark-cli` 命令找不到，尝试全路径 `/Users/xiesg/dev/cli/lark-cli`。用 `which lark-cli || find /Users/xiesg -name "lark-cli" -type f` 定位。
 

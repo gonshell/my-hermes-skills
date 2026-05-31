@@ -15,6 +15,7 @@ references:
   - references/hermes-home-env.md
   - references/enterprise-landscape.md
   - references/cron-run-deliver-pattern.md
+  - references/cron-feishu-write-conflict.md
 
 # Hermes Agent
 

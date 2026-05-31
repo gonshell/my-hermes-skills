@@ -59,3 +59,7 @@ Use `patch` for focused note changes when the current content gives you stable c
 ## Wikilinks
 
 Obsidian links notes with `[[Note Name]]` syntax. When creating notes, use these to link related content.
+
+## 参考资料
+
+- `references/vault-path-and-sync.md` — Vault 路径约定、iCloud 同步、Obsidian Git 一键配置脚本、官方定价速查
