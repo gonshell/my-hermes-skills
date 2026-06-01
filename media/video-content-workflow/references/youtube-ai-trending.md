@@ -132,16 +132,18 @@ output_dir = "/Users/xiesg/.hermes/cron/output/"
 - 晚间档：`youtube-ai-pm_YYYY-MM-DD.xml`（pm 前缀）
 - 下划线连接日期，不用空格
 
-## 网络不可用降级（2026-05-31 实测）
+## 网络不可用降级（2026-06-01 更新）
 
 YouTube 在国内网络可能完全不可达：
 - `curl` 返回 0 字节（非超时，而是连接被重置）
 - `browser_navigate` 超时（60s），浏览器守护进程也可能未启动
 - 同步检测：`github.com` 也不可达时，确认是整体出口问题而非 YouTube 单独限制
 
-**降级流程**：
+**降级流程**（优先使用替代数据源，见完整指南）：
 1. 快速检测网络：`curl -s --max-time 10 -o /dev/null -w "%{http_code}" "https://www.youtube.com"` → HTTP 000 即不可达
-2. 查找当日早间档文件：`ls /Users/xiesg/.hermes/cron/output/youtube-ai-am_$(date +%Y-%m-%d).xml`
-3. 如早间档存在 → 读取内容，替换 h1 标题为晚间档，生成晚间 XML
-4. 如早间档也不存在 → 生成「数据获取失败」占位 XML 上传飞书
-5. **不要反复重试浏览器**（每次 60s 超时 × N = 浪费大量时间）
+2. **优先**：用 Bing 视频搜索 + Bilibili 搜索获取真实数据填充报告
+3. **其次**：查找当日早间档文件复用
+4. **最后**：生成「数据获取失败」占位 XML 上传飞书
+5. **不要反复重试浏览器访问 YouTube**（每次 60s 超时 × N = 浪费大量时间）
+
+> 完整替代数据源策略见 `<references/youtube-unreachable-fallback.md>`

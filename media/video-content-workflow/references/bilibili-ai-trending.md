@@ -65,22 +65,49 @@ videos = [v for v in all_list if v.get('duration', 9999) <= 60]
 
 ## 热门榜单获取方法（2026-05-31 实测）
 
-### 方法1：Bilibili 排行榜 API（主用）
+### 方法1：Bilibili 排行榜 API（⚠️ 已废弃，返回 -352）
 
 ```bash
 curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all" \
-  -H "User-Agent: Mozilla/5.0" | python3 -c "
-import json,sys
-data = json.load(sys.stdin)
-for v in data['data']['list'][:5]:
-    print(v['bvid'], v['title'], v['duration'])
-"
+  -H "User-Agent: Mozilla/5.0"
+```
+- **返回 HTTP -352（timestamp expired）**：排行榜 API 目前需要登录态或新鲜 timestamp，直接 curl 已废弃
+- 旧文档称可用的 endpoint `type=all` + `order=hot` 等参数**均已失效**
+- **不要依赖此 API**，改用下方方法2/3
+
+### 方法2：Bilibili 搜索页抓取（主用，2026-05-31 实测可用）
+
+**长视频（>10分钟）**：
+```
+https://search.bilibili.com/all?keyword=AI人工智能&search_type=video&order=hot&duration=4
+```
+- `duration=4` = 10分钟以上
+- `order=hot` =最多播放
+- 数据提取：用 `browser_console` JavaScript 提取：
+```javascript
+var links = [];
+document.querySelectorAll('a[href*="/video/BV"]').forEach(a => {
+  var href = a.href;
+  var title = a.textContent.trim();
+  if (title && href && !title.includes('稍后再看')) {
+    links.push({href, title});
+  }
+});
+JSON.stringify(links.slice(0, 20));
 ```
 
-- 返回 100 条，按综合得分排序
-- 字段：`bvid, title, owner.name/uname, stat.{view,like,fav,danmu}, duration, pubdate`
+**小视频（<10分钟）**：
+```
+https://search.bilibili.com/all?keyword=AI人工智能&search_type=video&order=hot&duration=1
+```
+- `duration=1` = 10分钟以下
+- 同上 JS 提取，去重后取前7条
 
-### 方法2：Web 搜索（备用/补充）
+> ⚠️ `browser_snapshot` 会被截断（~310行），**不要用 snapshot 提取10+条数据**，必须用 `browser_console` JS 提取。
+
+> ⚠️ 搜索结果只显示播放量（万为单位）和点赞数，不显示精确值。
+
+### 方法3：Web 搜索（备用/补充）
 
 当 API 不可用或需快速概览时，用 `mcp_minimax_web_search` 搜索关键词：
 ```

@@ -56,7 +56,7 @@ output_path = os.path.join(output_dir, "bilibili-trending.xml")
 `https://api.bilibili.com/x/web-interface/ranking/v2?type=all&order=hot`
 
 #### 小视频 TOP 7
-从 `type=all&order=hot` 排序中**按视频时长过滤**，取 `duration ≤ 60` 秒的前7条。Bilibili 没有独立小视频 API，`type=smallvideo` 返回 -400。
+从 `type=all&order=hot` 排序中**按视频时长过滤**，取 `duration ≤ 90` 秒的前7条。Bilibili 没有独立小视频 API，`type=small`/`type=smallvideo` 均返回 -400（请求错误）或空数组，按播放量排序（不是综合评分）。
 
 #### API 字段
 `bvid, title, owner.name, owner.uname, stat.view, stat.like, duration, pubdate`
@@ -75,12 +75,39 @@ output_path = os.path.join(output_dir, "bilibili-trending.xml")
 
 YouTube 在国内网络环境下可能完全不可达（curl 返回 0 字节、browser 超时）。Cron job 遇到此情况时的降级流程：
 
+### 第一优先：用替代数据源获取真实数据
+
+当 YouTube 不可达时，**优先使用替代数据源填充报告**，而非直接放弃：
+
+1. **Bing 视频搜索**（推荐，覆盖全球内容）：
+   - URL：`https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+Gemini+trending+June+2026`
+   - 用 `browser_navigate` + `browser_snapshot` 提取搜索结果
+   - 搜索词组合：`"Google I/O 2026 AI"` / `"Claude Opus review"` / `"GPT news AI trending"` 等
+   - 数据包括：标题、来源网站、时长、上传日期（精确播放量通常缺失）
+   - 适合填充长视频和当日新发类别
+
+2. **Bilibili 搜索页**（推荐，覆盖中文 AI 内容）：
+   - URL：`https://search.bilibili.com/all?keyword=AI早报&search_type=video&order=pubdate`
+   - AI早报系列（橘鸦Juya 等频道）覆盖每日 AI 要闻，播放量高
+   - 可补充中文视角的 AI 热门内容
+
+3. **合并数据**：从两个来源合并去重，按播放量排序填充 TOP 10/5 列表
+
+### 第二优先：复用已有数据
+
 1. **快速检测**：先 `curl -s --max-time 10 -o /dev/null -w "%{http_code}" "https://www.youtube.com"` 确认可达性（HTTP 000 = 不通）
 2. **查找当日已有数据**：扫描 `output_dir` 中当日早间档文件（`youtube-ai-am_YYYY-MM-DD.xml`），如存在则复用其内容生成晚间档
-3. **无已有数据**：写入一条「数据获取失败」说明到 XML 并上传飞书，不静默跳过
-4. **不要重试浏览器**：YouTube 网络不通时浏览器也会超时（60s × N），直接跳过浏览器步骤
 
-> ⚠️ 降级时在 XML 中标注「数据来源：早间档快照，YouTube 网络不可达」以保持透明。
+### 最后手段：标记失败
+
+3. **无已有数据且替代源也无结果**：写入一条「数据获取失败」说明到 XML 并上传飞书，不静默跳过
+
+### 关键规则
+- **不要重试浏览器访问 YouTube**：网络不通时浏览器也会超时（60s × N），直接跳过
+- **降级时标注数据来源**：在 XML 中标注「数据来源：Bing视频搜索 + Bilibili（YouTube网络不可达）」以保持透明
+- **替代源数据质量**：Bing 视频搜索结果不含精确播放量时用 `—` 占位，不要编造数字
+
+详见 `<references/youtube-unreachable-fallback.md>`
 
 ---
 
