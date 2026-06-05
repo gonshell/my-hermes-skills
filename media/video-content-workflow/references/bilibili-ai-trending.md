@@ -1,38 +1,57 @@
-# bilibili-ai-trending 参考（2026年5月实测）
+# bilibili-ai-trending 参考（2026年6月实测）
 
 ## 数据源方案（已确认）
 
-### search/type API — **完全废弃，返回 HTTP 412**
+### ✅ search/all/v2 API — **主力方案（2026-06 实测有效）**
 
-> ⚠️ **结论（2026-05-30 实测）**：`https://api.bilibili.com/x/web-interface/search/type` 对**所有关键词**均返回 HTTP 412，无论英文/中文/长/短。
->
-> 旧版参考文档（称部分关键词可用）**已过时**，不要依赖 search API。
+```bash
+GET https://api.bilibili.com/x/web-interface/search/all/v2?keyword={keyword}&page=1
+```
 
-### 替代方案：从排行榜 API + AI 关键词过滤
+返回 JSON 中 `data.result[].data[]`，每项 `result_type in ['video', 'archive']` 的条目包含：
+- `bvid`, `title`, `author`, `duration`, `play`（播放）, `like`（点赞）
+
+**解析 duration**（格式如 `"12:34"` 或 `"4:0"`）：
+```python
+def parse_duration(dur_str):
+    parts = str(dur_str).split(':')
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except:
+        pass
+    return 0
+```
+
+### ⚠️ search/type API — **完全废弃，返回 HTTP 412**
+
+> **结论（2026-05-30 实测）**：`https://api.bilibili.com/x/web-interface/search/type` 对**所有关键词**均返回 HTTP 412。
+> **不要依赖此 API**。
+
+### 排行榜 API — **备选补充**
 
 ```bash
 GET https://api.bilibili.com/x/web-interface/ranking/v2?type=all
 ```
 - 返回 `data.list`，100条，按综合得分排序
 - **按 AI 关键词过滤**后取 TOP 15 长视频 + TOP 7 小视频
-
-### 排行榜 API 注意事项
-
-- API endpoint 为 `https://api.bilibili.com/x/web-interface/ranking/v2?type=all`，**不带 `order` 参数**（`order` 仅用于 search API，ranking v2 按内置综合算法排序）
 - `owner.name` / `owner.uname` 可能同时为空，需批量调用 `/x/web-interface/view?bvid=xxx` 补全
-- 小视频阈值用 `duration ≤ 60`（秒），长视频取剩余部分按综合评分排序
 
-### AI 关键词列表（过滤用）
+### AI 关键词列表（过滤用，2026-06 更新）
 
 ```
-AI, 人工智能, 大模型, ChatGPT, Deepseek, Claude, GPT, 机器学习,
+AI, 人工智能, 大模型, ChatGPT, DeepSeek, Claude, GPT, 机器学习,
 神经网络, LLM, Qwen, Kimi, Gemini, 文心, 通义, 智谱, AIGC,
-Agent, 智能体, Chatbot, BOT, 语言模型, 深度学习
+Agent, 智能体, Chatbot, BOT, 语言模型, 深度学习,
+Sora, OpenAI, Copilot, GPT-4, Stable Diffusion, Midjourney,
+o1, 推理模型, LangChain, PyTorch, 吴恩达, 上海交大
 ```
 
-过滤逻辑：视频标题含任一关键词 → 进入 AI 热门候选列表。
+> 注意：`DeepSeek` 要用正确大小写，`Deepseek`（全小写）不匹配。GPT-4 要带连字符。
 
-## 综合评分算法（排行榜 API 用）
+### 综合评分算法（排行榜 API 用）
 
 ```
 score = play × 0.01 + like × 0.5 + favourite × 0.8 + danmu × 0.3
@@ -49,63 +68,80 @@ score = play × 0.01 + like × 0.5 + favourite × 0.8 + danmu × 0.3
 | UP主 | `owner.name` 或 `owner.uname` |
 | bvid | `bvid` |
 
-> ⚠️ `owner.name` 在排行榜 API 中可能为空，需调用 `/x/web-interface/view?bvid=xxx` 批量补全。
-
 ## 小视频处理
 
 Bilibili **没有独立的小视频 API**，`type=small_video` 参数返回空数组。
 
-**正确方法**：从 `type=all` 排行榜中**按视频时长过滤**，取 `duration ≤ 60` 秒的前7条。
+**正确方法**：从搜索结果中**按视频时长过滤**：
+- 长视频：`duration >= 240` 秒（4分钟以上）
+- 小视频：`duration < 240` 秒
 
 ```python
-videos = [v for v in all_list if v.get('duration', 9999) <= 60]
+long_videos = [v for v in all_videos if v['duration'] >= 240]
+short_videos = [v for v in all_videos if v['duration'] < 240]
 ```
 
-> **阈值修正（2026-05-31）**：实测 `duration ≤ 60` 更准确地识别"小视频"（短视频/竖屏内容），旧值 `< 120` 可能混入中等时长视频。
+> **阈值说明（2026-06 实测）**：搜索结果 `duration` 字段以秒为整数（如 `120` 表示2分钟），ranking API `duration` 同理。小视频指竖屏短视频（通常 < 4分钟），长视频指标准横屏内容。
 
-## 热门榜单获取方法（2026-05-31 实测）
+## 热门榜单获取方法（2026-06 实测）
 
-### 方法1：Bilibili 排行榜 API（⚠️ 已废弃，返回 -352）
+### 方法1：Bilibili 搜索 API（✅ 推荐，2026-06 实测有效）
+
+**完整流程**（Python）：
+```python
+import json, subprocess, urllib.parse
+
+def search_bilibili(keyword, page=1):
+    kw = urllib.parse.quote(keyword)
+    cmd = f'''curl -s "https://api.bilibili.com/x/web-interface/search/all/v2?keyword={kw}&page={page}" \
+      -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"'''
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+ai_keywords = ['AI', '人工智能', '大模型', 'ChatGPT', 'DeepSeek', 'Claude', 'GPT',
+               '机器学习', '神经网络', 'AIGC', 'GPT-4', 'OpenAI', 'Sora', 'LLM',
+               '文心', '通义千问', '智谱', 'Copilot', '多模态', '深度学习', '吴恩达']
+
+all_results = []
+seen_bvid = set()
+
+for kw in ai_keywords:
+    data = search_bilibili(kw)
+    if data.get('code') == 0:
+        for section in data.get('data', {}).get('result', []):
+            if section.get('result_type') in ['video', 'archive']:
+                for item in section.get('data', []):
+                    bvid = item.get('bvid', '')
+                    if bvid and bvid not in seen_bvid:
+                        seen_bvid.add(bvid)
+                        title = item.get('title', '').replace('<em class="keyword">', '').replace('</em>', '')
+                        all_results.append({
+                            'title': title,
+                            'bvid': bvid,
+                            'link': f"https://www.bilibili.com/video/{bvid}",
+                            'duration': parse_duration(item.get('duration', '0')),
+                            'view': item.get('play', 0) or 0,
+                            'like': item.get('like', 0) or 0,
+                            'author': item.get('author', ''),
+                        })
+```
+
+- 去重用 `seen_bvid` 集合
+- **按 `play`（播放量）降序排序**后取 TOP 15 长视频 + TOP 7 小视频
+- `execute_code` 比 `terminal` 更适合运行多行 Python 脚本（无 shell 转义问题）
+- 标题中的 `<em class="keyword">` 和 `</em>` HTML 标签需要替换
+
+### 方法2：排行榜 API（备选）
 
 ```bash
-curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all" \
-  -H "User-Agent: Mozilla/5.0"
-```
-- **返回 HTTP -352（timestamp expired）**：排行榜 API 目前需要登录态或新鲜 timestamp，直接 curl 已废弃
-- 旧文档称可用的 endpoint `type=all` + `order=hot` 等参数**均已失效**
-- **不要依赖此 API**，改用下方方法2/3
-
-### 方法2：Bilibili 搜索页抓取（主用，2026-05-31 实测可用）
-
-**长视频（>10分钟）**：
-```
-https://search.bilibili.com/all?keyword=AI人工智能&search_type=video&order=hot&duration=4
-```
-- `duration=4` = 10分钟以上
-- `order=hot` =最多播放
-- 数据提取：用 `browser_console` JavaScript 提取：
-```javascript
-var links = [];
-document.querySelectorAll('a[href*="/video/BV"]').forEach(a => {
-  var href = a.href;
-  var title = a.textContent.trim();
-  if (title && href && !title.includes('稍后再看')) {
-    links.push({href, title});
-  }
-});
-JSON.stringify(links.slice(0, 20));
+curl -s 'https://api.bilibili.com/x/web-interface/ranking/v2?type=all' \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' \
+  -H 'Referer: https://www.bilibili.com/'
 ```
 
-**小视频（<10分钟）**：
-```
-https://search.bilibili.com/all?keyword=AI人工智能&search_type=video&order=hot&duration=1
-```
-- `duration=1` = 10分钟以下
-- 同上 JS 提取，去重后取前7条
-
-> ⚠️ `browser_snapshot` 会被截断（~310行），**不要用 snapshot 提取10+条数据**，必须用 `browser_console` JS 提取。
-
-> ⚠️ 搜索结果只显示播放量（万为单位）和点赞数，不显示精确值。
+注意：
+- `type=all` 是唯一有效参数，`order=hot` 不是 ranking v2 的有效参数
+- 返回 100 条，按内置综合算法排序
 
 ### 方法3：Web 搜索（备用/补充）
 
@@ -124,23 +160,27 @@ bilibili热门视频 AI人工智能 大模型 2025 site:bilibili.com
 ## 文档结构（写入飞书格式）
 
 ```xml
-<title>Bilibili AI热门推送 · 晚间档</title>
-<h1>每日Bilibili AI热门推送 · {日期} · 晚间档</h1>
-<h2>最热门长视频 TOP 15</h2>
-<p>AI相关热门视频排序（播放×0.01+点赞×0.5+收藏×0.8+弹幕×0.3）</p>
+<title>Bilibili AI热门视频</title>
+<h1>Bilibili AI热门视频 · {当日日期}</h1>
+<h2>热门长视频 TOP 15</h2>
+<p>按播放量排序</p>
 <ol>
-  <li seq="1">
-    <a href="https://www.bilibili.com/video/BVxxx">标题</a><br/>
-    播放：xxx万｜点赞：xx万｜收藏：xx万｜弹幕：xx万<br/>
-    UP主：xxx｜发布日期：yyyy-mm-dd｜时长：HH:MM:SS<br/>
-    综合评分：xxxxx
+  <li seq="auto">
+    <a href="https://www.bilibili.com/video/BVxxx">标题</a> ｜
+    UP主：xxx ｜播放：xxx ｜点赞：xxx ｜时长：xxx
   </li>
-  ...
 </ol>
-<h2>最热门小视频 TOP 7</h2>
-<p>时长60秒以内的AI相关热门视频</p>
-<ol>...</ol>
+<h2>热门小视频 TOP 7</h2>
+<p>按播放量排序</p>
+<ol>
+  <li seq="auto">
+    <a href="https://www.bilibili.com/video/BVxxx">标题</a> ｜
+    UP主：xxx ｜播放：xxx ｜点赞：xxx ｜时长：xxx
+  </li>
+</ol>
 ```
+
+> ⚠️ 文档标题固定为 `<title>Bilibili AI热门视频</title>`，**不要加档期后缀**（如"晚间档"），由 cron job prompt 根据日期生成 h1。
 
 ## cronjob 设计要点
 
@@ -154,6 +194,9 @@ bilibili热门视频 AI人工智能 大模型 2025 site:bilibili.com
 output_dir = "/Users/xiesg/.hermes/cron/output/"
 ```
 不要用 `os.path.expanduser("~/.hermes/cron/output/")`。
+
+### 输出文件名
+`merged_bilibili-ai.xml`（注意是 `merged_` 前缀，不是 `bilibili-ai_`）
 
 ### 触发命令
 ```bash

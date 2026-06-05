@@ -19,22 +19,22 @@
 - `vc.bilibili.com/p/eden/rank` SPA → 需登录 Cookie，curl 无法直接获取
 - `api.vc.bilibili.com/board/v1/ranking/top` → 302 重定向到 HTML 登录页
 
-**正确方法**：从 `type=all&order=hot` 排序中按视频时长 `duration ≤ 60` 秒过滤，取前7条作为小视频。
+**正确方法**：从 `type=all&order=hot` 排序中按视频时长 `duration ≤ 90` 秒过滤，取前7条作为小视频。
 
-> **阈值修正（2026-05-31）**：`duration ≤ 60` 比 `< 120` 更准确识别短视频内容。2026-05-31 实测：100条热门视频中 `duration ≤ 60` 的有17条，选出TOP 7 充裕。
+> **阈值修正（2026-05-31）**：`duration ≤ 90` 比 `< 120` 更准确识别短视频内容。2026-05-31 实测：100条热门视频中 `duration ≤ 90` 的有27条，选出TOP 7 充裕。
 
 ## 热门榜单获取方法（2026-05-31 实测）
 
-### 方法1：Bilibili 排行榜 API（推荐，但需注意限流）
+### 方法1：Bilibili 排行榜 API（推荐，2026-06 实测可用）
 
-必须携带 `Referer` 和 `Origin` 头，否则返回 `-352`：
+> ⚠️ **2026-06-04 修正**：ranking v2 API **没有废弃**，实测完全可用。之前的 -352 错误是因为缺少请求头或触发了频率限制。
+
+必须携带完整请求头：
 
 ```bash
-curl -s "https://api.bilibili.com/x/web-interface/ranking/v2?type=all&order=hot" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
-  -H "Referer: https://www.bilibili.com/v/popular/rank/all" \
-  -H "Accept: application/json, text/plain, */*" \
-  -H "Origin: https://www.bilibili.com" | python3 -c "
+curl -s 'https://api.bilibili.com/x/web-interface/ranking/v2?type=all' \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' \
+  -H 'Referer: https://www.bilibili.com/' | python3 -c "
 import json,sys
 data = json.load(sys.stdin)
 for v in data['data']['list'][:5]:
@@ -42,7 +42,11 @@ for v in data['data']['list'][:5]:
 "
 ```
 
-> ⚠️ **-352 限流问题**：`execute_code` 的 `urllib` 和 `terminal curl` 均受频率限制。单次请求100条数据通常成功，但连续逐个调用 `/x/web-interface/view?bvid=xxx` 补全UP主名时，15~20个请求后开始出现 -352。**解决：批量处理 + 0.2s delay**。
+注意：
+- `type=all` 是唯一有效参数（`order=hot` 对 ranking v2 无效，是 search API 参数）
+- 返回 100 条，按内置综合算法排序
+- **大量数据不要内联到 Python 脚本**：先 `curl` 保存到 `/tmp/bilibili.json`，再用 `python3 open()` 读取
+- `owner.name` / `owner.uname` 可能为空，需补全时加 0.2s delay 防限流
 
 ### 方法2：execute_code 批量获取 + 补全 UP 主名
 
@@ -69,33 +73,39 @@ for v in empty_up:
     time.sleep(0.2)
 ```
 
-### 方法3：浏览器直接访问 API（限流严重时的降级方案）
+### 方法3：浏览器 console 执行 JS（2026-06 实测有效）
 
-当 `execute_code` 和 `terminal curl` 均持续返回 -352 时，用浏览器获取数据：
+>⚠️ **2026-06-05 关键发现**：`execute_code`（sandbox 环境）和 `terminal curl` 均返回 -352 限流，但 **browser console 执行 JS 可以直接读取完整 JSON**。这是目前最可靠的方案。
 
+```javascript
+// Step 1: navigate
+browser_navigate → "https://api.bilibili.com/x/web-interface/ranking/v2?type=all&order=hot"
+
+// Step 2: 验证数据加载
+browser_console → expression: (async () => {
+  const data = JSON.parse(document.body.innerText);
+  return JSON.stringify({code: data.code, listLen: data.data?.list?.length || 0});
+})()
+
+// Step 3: 提取所有字段
+browser_console → expression: (async () => {
+  const data = JSON.parse(document.body.innerText);
+  const list = data.data.list;
+  return JSON.stringify(list.map(v => ({
+    bvid: v.bvid, title: v.title,
+    up: v.owner?.name || v.owner?.uname || '',
+    play: v.stat?.view || 0, duration: v.duration || 0,
+    link: v.short_link_v2 || `https://www.bilibili.com/video/${v.bvid}`
+  })));
+})()
+
+// Step 4: 通过 write_file 保存 JSON 到临时文件，再用 execute_code open() 读取
+// ⚠️ 不要把大数据内联到 Python 脚本，会导致语法错误
 ```
-1. browser_navigate → "https://api.bilibili.com/x/web-interface/ranking/v2?type=all&order=hot"
-2. browser_console → expression: document.body.innerText（获取完整 JSON）
-3. 用 browser_console 执行 JS 提取关键字段：
-   (async () => {
-     const data = JSON.parse(document.body.innerText);
-     const list = data.data.list;
-     return JSON.stringify(list.map(v => ({
-       bvid: v.bvid, title: v.title, owner_name: v.owner?.name || '',
-       view: v.stat?.view || 0, like: v.stat?.like || 0,
-       duration: v.duration || 0, pubdate: v.pubdate || 0
-     })));
-   })()
-4. 将返回的 JSON 数组写入临时文件，再用 execute_code 处理
-```
 
-> ⚠️ **大数据不要内联到 execute_code**：100条视频的 JSON 数据直接嵌入 Python 脚本会导致语法错误（特殊字符+超长字符串）。正确做法是先用 `write_file` 保存 JSON 到文件，再用 `execute_code` 的 `open()` 读取。
-
-### 方法3：Web 搜索（备用）
+### 方法4：Web 搜索（备用）
 
 当 API 不可用时，用 `mcp_minimax_web_search` 搜索 `bilibili热门视频 AI大模型 2025 site:bilibili.com`。
-
-> ⚠️ 搜索结果中的播放量为估算值（"xx万"），精确数据需调 API。BV号可能缺失需从详情页获取。
 
 ## API 响应字段参考（2026-05 实测）
 

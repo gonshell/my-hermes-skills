@@ -74,25 +74,16 @@
 ### YouTube 模板（方案A 双档期结构）
 
 ```xml
-<docx><title>YouTube AI热门视频</title><body>
-<h1>每日AI热门视频推送 · {YYYY-MM-DD} · 早间档</h1>
+<docx><title>YouTube AI热门视频 · 晚间档</title><body>
+<h1>YouTube AI热门视频 · {YYYY-MM-DD} · 晚间档</h1>
 <h2>最热门长视频 TOP 10</h2>
 <p>本周上传，播放量+互动率综合评分排序</p>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间 · 频道名</li>...</ol>
+<ol><li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>...</ol>
 <h2>最热门短视频 TOP 5</h2>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间</li>...</ol>
+<ol><li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>...</ol>
 <h2>当日新发热门视频 TOP 10</h2>
-<p>本周新上传视频，按最新排序</p>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间 · 频道名</li>...</ol>
-<h1>每日AI热门视频推送 · {YYYY-MM-DD} · 晚间档</h1>
-<h2>最热门长视频 TOP 10</h2>
-<p>本周上传，播放量+互动率综合评分排序</p>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间 · 频道名</li>...</ol>
-<h2>最热门短视频 TOP 5</h2>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间</li>...</ol>
-<h2>当日新发热门视频 TOP 10</h2>
-<p>本周新上传视频，按最新排序</p>
-<ol><li seq="1"><a href="URL">标题</a> · 播放量 · 时间 · 频道名</li>...</ol>
+<p>最近上传，按最新排序</p>
+<ol><li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>...</ol>
 </body></docx>
 ```
 
@@ -119,21 +110,16 @@
 
 ## 飞书文档映射（当前有效）
 
-| 文档标题 | Token | 链接 |
-|---------|-------|------|
-| YouTube AI热门视频 | `OoxcdJ72worwMHxwK73ctbdhn0b` | https://zt854jxlft.feishu.cn/docx/OoxcdJ72worwMHxwK73ctbdhn0b |
-| Bilibili 热门视频 | `MjT6dT3abopHBpxkwPCcauGWn6e` | https://zt854jxlft.feishu.cn/docx/MjT6dT3abopHBpxkwPCcauGWn6e |
+> ⚠️ **重要**：完整的实时文档映射（含 Token、链接、cron job ID）已迁移至 `<references/feishu-doc-map.md>`。
+> 本文件仅保留 YouTube 晚间档的**具体结构规范**（标题模板、内容格式），其他任务请参考 feishu-doc-map.md。
 
----
+### YouTube AI 热门晚间档文档
 
-## cron 任务映射
+| 文档标题 | Token | 链接 | cron Job ID |
+|---------|-------|------|-------------|
+| YouTube AI热门视频 · 晚间档 | `HhyMdusqdoVcW9xLyd2c2Yc2nnf` | https://zt854jxlft.feishu.cn/docx/HhyMdusqdoVcW9xLyd2c2Yc2nnf | `d470b5d9b593` |
 
-| 任务 | Job ID | 时间 | 文档 Token | 写入模式 |
-|------|--------|------|-----------|---------|
-| YouTube AI早间档 | `fa294bf7d232` | 06:00 | `OoxcdJ72...` | overwrite |
-| YouTube AI晚间档 | `d470b5d9b593` | 20:00 | `OoxcdJ72...` | overwrite |
-| Bilibili AI热门 | `1f4c7fb989aa` | 21:00 | `MjT6dT3a...` | append |
-| Bilibili 全站热门 | `0e9f3cb36fe6` | 22:00 | `MjT6dT3a...` | overwrite |
+完整 Token 映射和 cron job 列表见 `<references/feishu-doc-map.md>`。
 
 ---
 
@@ -141,11 +127,28 @@
 
 ### 路径约束
 
-`lark-cli --content @filepath` 必须从 HERMES_HOME（`/Users/xiesg/`）用相对路径：
+`lark-cli --content @filepath` 必须满足以下条件之一：
 
-- ✅ `--content @.hermes/cron/output/file.xml`（从 HERMES_HOME 的 `.hermes/cron/output/` 目录）
-- ❌ `--content @/absolute/path`（绝对路径报错）
-- ❌ `--content @~/path`（波浪号路径报错）
+1. **相对路径**（推荐）：文件放在 HERMES_AGENT_CWD（`/Users/xiesg/.hermes/hermes-agent/`），直接用文件名或 `./filename`：
+   ```bash
+   # 文件在 HERMES_AGENT_CWD 中
+   --content @merged_bilibili.xml
+   # 或显式相对路径
+   --content @./merged_bilibili.xml
+   ```
+
+2. **从 HERMES_HOME 引用**（需完整相对路径）：
+   ```bash
+   # 从 /Users/xiesg/ 引用 .hermes/cron/output/ 下的文件
+   --content @./.hermes/cron/output/file.xml
+   ```
+
+❌ **绝对路径报错**：`--content @/tmp/file.xml` 或 `--content @~/path` 均报错：
+```
+--content: invalid file path "/tmp/xxx": --file must be a relative path within the current directory
+```
+
+**临时文件处理**：当数据先写入 `/tmp/` 时，必须先 `cp` 到 HERMES_AGENT_CWD 再引用。
 
 ### cronjob Python 路径偏移
 
