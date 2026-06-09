@@ -137,9 +137,9 @@
    --content @./merged_bilibili.xml
    ```
 
-2. **从 HERMES_HOME 引用**（需完整相对路径）：
+2. **从 HERMES_HOME 引用**（cron output 文件用这个路径）：
    ```bash
-   # 从 /Users/xiesg/ 引用 .hermes/cron/output/ 下的文件
+   # cron output 文件在 ~/.hermes/cron/output/
    --content @./.hermes/cron/output/file.xml
    ```
 
@@ -147,6 +147,8 @@
 ```
 --content: invalid file path "/tmp/xxx": --file must be a relative path within the current directory
 ```
+
+**cron output 文件注意**：不要写到 HERMES_AGENT_CWD（`~/.hermes/hermes-agent/`），那不是 lark-cli 能读取的路径。cron output 应写到 `/Users/xiesg/.hermes/cron/output/`，lark-cli 从 HERMES_HOME 引用时用 `@./.hermes/cron/output/file.xml`。
 
 **临时文件处理**：当数据先写入 `/tmp/` 时，必须先 `cp` 到 HERMES_AGENT_CWD 再引用。
 

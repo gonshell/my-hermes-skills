@@ -1,8 +1,8 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正）
 
 ## 背景
 
-YouTube 在国内数据中心网络环境下可能被完全封锁（curl 返回 HTTP 000，连接重置）。
+YouTube 在国内数据中心网络环境下可能被完全封锁（curl 返回 HTTP 000，连接被重置）。
 此时需使用替代数据源填充 AI 热门视频报告。
 
 ## 数据源1：Bing 视频搜索
@@ -10,7 +10,7 @@ YouTube 在国内数据中心网络环境下可能被完全封锁（curl 返回 
 ### 优势
 - 覆盖全球 YouTube、Vimeo、Dailymotion 等平台视频
 - 在国内网络稳定可达
-- 搜索结果包含：标题、来源、时长、上传日期
+- 搜索结果包含：标题、来源、时长、上传日期、估算播放量
 
 ### 搜索 URL 模板
 
@@ -30,13 +30,17 @@ https://www.bing.com/videos/search?q=AI+大模型+热门+2026
 
 ### 数据提取方式
 
-用 `browser_navigate` 打开搜索页 → `browser_snapshot`（full=true）读取结果。
+用 `browser_navigate` 打开搜索页 → `browser_snapshot` 读取结果，或用 `browser_console` 执行 JS 提取结构化数据（标题、播放量、时长、上传时间、频道）。
 Bing 视频搜索结果页面渲染稳定，snapshot 通常可获取 10-20 条结果。
 
 ### 局限性
-- **不含精确播放量**（部分条目有估算值，大部分无）→ 用 `—` 占位
+- 部分条目无精确播放量（无 → 用 `—` 占位，不要编造）
 - 搜索结果以相关性排序，非播放量排序
 - 链接可能是 Bing 重定向链接，需提取实际 URL
+
+### 死路：RSS feed 不要尝试
+
+`https://www.bing.com/videos/feed?count=30&q=...&format=rss` 会 301 重定向到 `https://cn.bing.com/videos/feed?...`，而 cn.bing.com 端点**无视 `format=rss` 直接返回 HTML 搜索页**。浪费时间，绕开。
 
 ## 数据源2：Bilibili 搜索页
 
@@ -58,20 +62,36 @@ https://search.bilibili.com/all?keyword=AI+人工智能&search_type=video&order=
 https://search.bilibili.com/all?keyword=AI+2026-06-01&search_type=video&order=pubdate
 ```
 
-### 数据提取方式
+### 数据提取方式（2026-06-09 实测修正）
 
-用 `browser_navigate` 打开搜索页 → `browser_console` 执行 JS 提取：
-```javascript
-var links = [];
-document.querySelectorAll('a[href*="/video/BV"]').forEach(a => {
-  var href = a.href;
-  var title = a.textContent.trim();
-  if (title && href && !title.includes('稍后再看')) {
-    links.push({href, title});
-  }
-});
-JSON.stringify(links.slice(0, 20));
-```
+⚠️ **Bilibili 搜索页所有视频卡片标题都被前端遮盖为"稍后再看"** —— 即使用 JS 抓 `<h3>.textContent` 拿到的也是 `稍后再看{播放量}{时长}`，不是真实标题。原版 JS 过滤 `!title.includes('稍后再看')` 会过滤掉所有条目。
+
+**正确流程**：
+
+1. `browser_navigate` 打开搜索页（按 `pubdate` 或 `hot` 排序均可）→ `browser_console` 抓 BVID 列表（不读 title）：
+   ```javascript
+   var bvids = [];
+   document.querySelectorAll('a[href*="/video/BV"]').forEach(a => {
+     var m = a.href.match(/\/video\/(BV[A-Za-z0-9]+)/);
+     if (m && !bvids.includes(m[1])) bvids.push(m[1]);
+   });
+   JSON.stringify(bvids.slice(0, 25));
+   ```
+
+2. 对每个 BVID 调用 `https://api.bilibili.com/x/web-interface/view?bvid=xxx` 拿真实标题、频道、播放量、时长、发布时间：
+   ```bash
+   curl -s "https://api.bilibili.com/x/web-interface/view?bvid=BVxxx" -A "Mozilla/5.0" | python3 -c "
+   import sys, json
+   d = json.load(sys.stdin)['data']
+   print(f\"{d['title']}\t{d['owner']['name']}\t{d['stat']['view']}\t{d['duration']}\t{d['pubdate']}\")
+   "
+   ```
+
+   返回字段：`title / owner.name / stat.view / duration / pubdate`。
+
+3. 按 `pubdate` 降序得到"当日新发"，按 `stat.view` 降序得到"最热门"。
+
+> **不要尝试 Bing 视频搜索的 RSS feed**：`/videos/feed?format=rss` 会 301 到 `cn.bing.com` 然后被改写成 HTML 搜索页，不会返回 RSS。用 `browser_navigate` + `browser_console` 走 HTML 路径。
 
 ### 高价值频道（AI 早报系列）
 

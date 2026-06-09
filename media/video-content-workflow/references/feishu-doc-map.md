@@ -76,3 +76,7 @@ lark-cli docs +update --api-version v2 \
 output_dir = "/Users/xiesg/.hermes/cron/output/"
 xml_path = output_dir + f"youtube-ai-am_{date}.xml"
 ```
+
+**lark-cli 读取 cron output 文件的正确路径**：
+- ✅ `@./.hermes/cron/output/youtube-ai-pm_2026-06-08.xml`（从 HERMES_HOME 相对路径）
+- ❌ `@./.hermes/hermes-agent/file.xml`（HERMES_AGENT_CWD，错误）

@@ -1,0 +1,16 @@
+# Hermes runtime metadata (not user-edited skills)
+.bundled_manifest
+.curator_backups/
+.curator_state
+.hub/
+.usage.json
+.usage.json.lock
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Common venv artifacts
+.venv/
+venv/

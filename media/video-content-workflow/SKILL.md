@@ -40,6 +40,8 @@ metadata:
 
 详见 `<references/bilibili-ai-trending.md>`
 
+> **2026-06-09 实测补充**：search/type API 可用（412 是 anti-bot 节流，retry 即可）/ search/all/v2 的 play 字段始终为 0 / `/x/web-interface/popular` 是被忽略的热门源 / "Ai教程"是 Adobe Illustrator 假阳性。详见 `<references/bilibili-ai-trending-pitfalls.md>`
+
 ### Bilibili 全站热门 → `bilibili-trending`
 
 获取 Bilibili 全站热门视频，与 AI 热门不同的全站综合排名。
@@ -70,6 +72,45 @@ output_path = os.path.join(output_dir, "bilibili-trending.xml")
 > ⚠️ **格式一致性要求**：所有写入飞书文档的 cron job prompt 必须显式规定文档标题模板（如 `{任务名} · {日期} · {档期}`）和内容结构（h1/h2 层级 + `<ol>` 列表）。未规定的 prompt 会导致 agent 自由发挥，产生不一致格式（如 lark-table vs Markdown 列表、固定标题 vs 动态标题）。
 
 ---
+
+## 关键 Pitfall（2026-06-09 实测新增）
+
+### 1. lark-cli `+update` 写 XML 时 `<docx>` 和 `<body>` 标签会被转义（degrade_code=4007）
+
+每次上传都会在响应中看到：
+```
+"warnings": [
+  "degrade_code=4007,msg=Unsupported tag <docx> was escaped...",
+  "degrade_code=4007,msg=Unsupported tag <body> was escaped..."
+]
+```
+
+**这是非致命的** — `ok: true`、文档写入成功、目录正常生成。`degrade_code=4007` 表示 lark 把这两个根包装标签当成了不支持的 inline 标签并 escape，但里面的 `<h1>/<h2>/<ol>/<li>` 等内容会正常解析。
+
+**结论**：继续使用 `<docx><title>...</title><body>...</body></docx>` 包装（参考下面的 XML 模板），不要为了消除 warning 而改用裸 XML（裸 XML 反而会导致飞书把整个内容当文本）。
+
+### 2. Bilibili 搜索页 DOM 把所有视频标题都遮盖为"稍后再看"
+
+`https://search.bilibili.com/all?keyword=AI&...` 页面里，所有视频卡片的 `<h3>` 标题文本都是 `稍后再看{播放量}{时长}` 格式，真实标题被前端动态注入但抓取时被覆盖。
+
+**解法**：用 `browser_console` 抓取所有 `a[href*="/video/BV"]` 链接得到 BVID 列表，然后**通过 API 批量解析真实标题**：
+```bash
+for b in BV...; do
+  curl -s "https://api.bilibili.com/x/web-interface/view?bvid=$b" -A "Mozilla/5.0" | python3 -c "
+import sys, json
+d = json.load(sys.stdin).get('data', {})
+print(f\"{$b}\t{d.get('title','')}\t{d.get('owner',{}).get('name','')}\t{d.get('stat',{}).get('view',0)}\t{d.get('duration',0)}\t{d.get('pubdate',0)}\")
+"
+done
+```
+
+API 返回字段：`title / owner.name / stat.view / duration / pubdate`，完全够用。
+
+### 3. Bing 视频搜索 RSS feed 不可用
+
+`https://www.bing.com/videos/feed?count=30&q=...&format=rss` 会 301 重定向到 `https://cn.bing.com/videos/feed?...`，而 cn.bing.com 端点直接返回 HTML 搜索页（无视 format=rss）。
+
+**正确做法**：用 `browser_navigate` 打开 `https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+trending&FORM=HDRSC6`，通过 `browser_console` 执行 JS 提取结构化数据，或 `browser_snapshot` 阅读可见结果。
 
 ## 网络不可用降级策略
 
@@ -128,15 +169,63 @@ python3 SKILL_DIR/scripts/fetch_transcript.py "URL" --text-only
 ### lark-cli --content 路径规则
 - `--content @/absolute/path` 和 `--content @~/path` 均报错
 - **必须从 HERMES_HOME（`/Users/xiesg/`）用相对路径**：`@./.hermes/cron/output/file.xml`
+## 飞书文档写入（XML 格式规范）
 
-### lark-cli docs +update（v2 API）
+> ⚠️ **2026-06-07 关键修复**：lark-cli `--doc-format xml` 期望 DocxXML 格式（`<docx><title>...</title><body>...</body></docx>`），**不是** XML 根节点格式。错误格式（`<YouTubeTrending>...</YouTubeTrending>` 或 `<?xml?>` 声明）会导致飞书将标签作为纯文本转义，目录功能失效。
+
+### 正确 XML 模板（晚间档）
+
+```xml
+<docx><title>YouTube AI热门视频 · 晚间档</title><body>
+<h1>YouTube AI热门视频 · {YYYY-MM-DD} · 晚间档</h1>
+
+<h2>最热门长视频 TOP 10</h2>
+<p>本周上传，播放量+互动率综合评分排序</p>
+<ol>
+<li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>
+...
+</ol>
+
+<h2>最热门短视频 TOP 5</h2>
+<ol>
+<li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>
+...
+</ol>
+
+<h2>当日新发热门视频 TOP 10</h2>
+<p>最近上传，按最新排序</p>
+<ol>
+<li seq="auto"><a href="URL">标题</a> ｜频道：xxx ｜播放：xxx ｜时长：xxx ｜上传：xxx</li>
+...
+</ol>
+
+</body></docx>
+```
+
+### 错误格式 ❌
+
+```xml
+<!-- ❌ 根节点 + XML 声明会导致标签被飞书转义为纯文本 -->
+<?xml version="1.0" encoding="UTF-8"?>
+<YouTubeTrending>
+<title>YouTube AI热门视频 · 晚间档</title>
+<h1>YouTube AI热门视频 · {date} · 晚间档</h1>
+...
+</YouTubeTrending>
+```
+
+### 飞书文档写入命令
+
 ```bash
 cd /Users/xiesg && lark-cli docs +update --api-version v2 \
   --doc "<doc_id>" --command overwrite \
-  --content @./.hermes/cron/output/file.xml --doc-format xml
+  --content @./.hermes/cron/output/youtube-ai-pm_YYYY-MM-DD.xml --doc-format xml
 ```
-**必须用 `--command overwrite`，不是 `--mode append`（v1 参数）**
 
+早间档文档 token：`EbHDdKARYo4vEExQiNGc3qiGnSe`
+晚间档文档 token：`HhyMdusqdoVcW9xLyd2c2Yc2nnf`
+晚间档文档 token：`HhyMdusqdoVcW9xLyd2c2Yc2nnf`
+早间档文档 token：`EbHDdKARYo4vEExQiNGc3qiGnSe`
 ### cronjob 路径偏移
 `os.path.expanduser("~/.hermes/cron/output/")` 在 cronjob 中展开为错误路径。**必须硬编码绝对路径**：
 ```python

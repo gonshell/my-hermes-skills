@@ -135,4 +135,51 @@ browser_console → expression: (async () => {
 score = play * 0.4 + likes * 0.6
 ```
 用于长视频和小视频分别排序后写入 XML。
+
+## 飞书文档写入（DocxXML 格式规范）
+
+> ⚠️ **2026-06-08 关键修正**：lark-cli `--doc-format xml` 期望 **DocxXML 格式**，即 `<docx><title>...</title><body>...</body></docx>` 结构。**不能用自定义 XML 根节点**（如 `<BilibiliTrending>`），否则飞书将标签转义为纯文本，目录功能失效。2026-06-08 实测返回警告：`Unsupported tag <BilibiliTrending> was escaped`。
+
+### 正确格式 ✅
+
+```xml
+<docx><title>B站全站热门视频</title><body>
+<h1>B站全站热门视频 · {YYYY年MM月DD日}</h1>
+
+<h2>热门长视频 TOP 15</h2>
+<p>按播放量排序</p>
+<ol><li seq="auto"><a href="链接">标题</a> ｜UP主：xxx ｜播放：xxx ｜时长：xxx</li>...</ol>
+
+<h2>热门小视频 TOP 7</h2>
+<p>按播放量排序</p>
+<ol><li seq="auto"><a href="链接">标题</a> ｜UP主：xxx ｜播放：xxx ｜时长：xxx</li>...</ol>
+
+</body></docx>
+```
+
+### 错误格式 ❌
+
+```xml
+<!-- ❌ 自定义根节点 + XML 声明会导致标签被飞书转义为纯文本 -->
+<?xml version="1.0" encoding="UTF-8"?>
+<BilibiliTrending>
+<title>B站全站热门视频</title>
+<h1>B站全站热门视频 · {日期}</h1>
+...
+</BilibiliTrending>
+```
+
+### 写入命令
+
+```bash
+# 工作目录：HERMES_HOME (/Users/xiesg/)
+# 临时文件写入 HERMES_HOME 根目录，lark-cli 从相对路径读取
+lark-cli docs +update --api-version v2 \
+  --doc "TcjbdsX0ToprvCxXPbQcbLqknTq" \
+  --command overwrite \
+  --content @./merged_bilibili.xml \
+  --doc-format xml
+```
+
+⚠️ `--content @/absolute/path` 和 `--content @~/path` 均报错：`--file must be a relative path within the current directory`。文件必须在 HERMES_HOME 下，用 `@./filename.xml` 引用。
 ```

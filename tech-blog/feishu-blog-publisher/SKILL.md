@@ -1,6 +1,6 @@
 ---
 name: feishu-blog-publisher
-version: 1.0.0
+version: 1.1.0
 description: "将 Markdown 技术博客文章自动转换为飞书富格式文档发布。支持 Callout/Table/Mermaid/HR 等富块转换、图表意图识别（按内容特征自动选择 Mermaid/PlantUML/表格），调用 lark-cli 创建文档并写入。依赖 lark-doc skill。"
 author: Hermes Agent
 license: MIT
@@ -8,6 +8,8 @@ metadata:
   hermes:
     tags: [feishu, blog, markdown, publisher, lark, docx-xml]
     related_skills: [lark-doc, lark-whiteboard, tech-blog, reader-persona-feedback, narrative-theme-generator, writing-style-extractor, chapter-consistency-checker, review-checklist-generator]
+references:
+  - references/md-to-docx-conversion.md
 ---
 
 # 飞书博客发布器（feishu-blog-publisher）
@@ -175,6 +177,10 @@ Markdown 中常见的提示块语法映射为飞书 Callout：
 
 - 标签本身 **禁止转义**（`<p>` 保持原样）
 - 仅文本内容中的特殊字符转义：`<` → `&lt;`、`>` → `&gt;`、`&` → `&amp;`
+- **占位符转义**（重要）：源 markdown 中作为占位符的尖括号（如 `/skill <name>`、`hermes cron edit <id>`、`--context-from <A的job_id>`、`mcp_<server>_<tool>`）：
+  - 在 **Markdown 模式**下需要写为 `\<name>` `\<id>` 等（反斜杠使 `<` 不被识别为 HTML 标签起始）
+  - 在 **DocxXML 模式**下需要写为 `&lt;name&gt;` `&lt;id&gt;` 等（XML 文本节点里 `<` 必须转义为实体）
+  - 详见 `references/md-to-docx-conversion.md`
 
 #### 表格转换模板
 
@@ -226,12 +232,25 @@ cat prompting-playbook-blog.md | lark-cli docs +create --api-version v2 --doc-fo
 lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   # 不支持
 ```
 
-**两种内容传递方式：**
+**三种内容传递方式：**
 
 | 方式 | 适用场景 | 示例 |
 |------|---------|------|
 | `--new-title "$(head -1 {file} \| sed 's/^# //')" --content @file` | **推荐**：本地 `.md` 文件，第一行是 `# 标题` | 自动从文件第一行提取标题，不会出现"Untitled" |
 | `--markdown -`（stdin管道）+ `--title "标题"` | 无本地文件、Markdown 内容在变量中 | `cat file.md \| lark-cli docs +create --api-version v2 --doc-format markdown --title "标题" --markdown -` |
+| `--doc-format xml --content @file` | **源文件已是完整 DocxXML**（含 `<title>` 元素和 `<table>`/`<pre>` 等富块） | 不需要任何标题参数——XML 内的 `<title>` 元素会被飞书作为文档标题使用 |
+
+**关于第三种方式的典型用法**：
+
+当源 markdown 已通过脚本（`md_to_docx.py` 等）转成了 DocxXML，或**用户要求"保留文字内容、优化图表展示"**时，应该走这条路：
+
+```bash
+# ✅ 正确：XML 自带标题，不需要 --new-title / --title
+lark-cli docs +create --api-version v2 --doc-format xml --content @./handbook.docx.xml
+
+# XML 文件首部必须含 <title>xxx</title>，否则文档会显示为 "Untitled"
+head -1 handbook.docx.xml   # 应该是 <title>文档标题</title>
+```
 
 **关于 `--title` 的误解澄清：**
 - ❌ `--title` 不能与 `--content @file` 同时使用（会报 "unknown flag: --new-title" 或 "content is required"）
@@ -338,7 +357,10 @@ lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   #
 
 11. **lark-cli 可能不在 PATH 中**：如果 `lark-cli` 命令找不到，尝试全路径 `/Users/xiesg/dev/cli/lark-cli`。用 `which lark-cli || find /Users/xiesg -name "lark-cli" -type f` 定位。
 
-12. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。
+12. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。**关键区分**：
+    - **查看权限**：bot 身份创建的文档，**任何打开链接的登录用户默认有查看权限**（飞书行为），不需要 `auth login`。
+    - **编辑权限**：需要 `lark-cli auth login` 后用 `--as user` 身份重新授权，或由 bot 管理员在飞书文档的"分享"面板手动添加协作者。
+    - 因此**如果用户只要求"打开就能看"**，bot 身份创建就够用，警告可忽略。
 
 13. **read_file 输出的文件含行号前缀**：从 read_file 读取的 `.md` 文件，行首是 `1|` `2|` 格式的行号，不是纯 Markdown。直接写入发布会导致整篇文档都是行号。**必须先 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号**，再写入临时文件。
 
@@ -359,6 +381,25 @@ content = result['content']  # KeyError
 
 解法：文件 I/O 用原生 Python `open()`/`read()`，不要用 `read_file` 工具的返回值。
 
+15. **占位符尖括号在 Markdown 与 DocxXML 模式下的转义不同**（常被遗漏）：源 markdown 文档里大量出现的占位符（如 `/skill <name>`、`hermes cron edit <id>`、`--context-from <A的job_id>`、`mcp_<server>_<tool>`），是**用户文档里的字面文本**，但在不同发布模式下转义写法不同：
+
+    - **Markdown 模式**：`/skill \<name>` `\<id>`（反斜杠告诉飞书"`<` 不要当 HTML 标签起始"——飞书文档会显示为 `/skill <name>`）
+    - **DocxXML 模式**：`/skill &lt;name&gt;` `&lt;id&gt;`（XML 文本节点里 `<` 必须转义为实体——飞书文档会显示为 `/skill <name>`）
+
+    **常见错误**：
+    - 在 DocxXML 模式里写 `\<name>`（带反斜杠）→ 飞书会显示成字面 `\<name>`，多了个反斜杠
+    - 在 Markdown 模式里写 `<name>`（不带反斜杠）→ 飞书会解析为 HTML 标签起始，显示丢失 `<name>` 三个字符
+
+    **判断自己用的是哪种模式**：看发布命令的 `--doc-format` 参数。脚本里转义时务必按目标模式选对应规则。详细转换经验见 `references/md-to-docx-conversion.md`。
+
+16. **用户要求"保留内容不要更改"时的双重要求**（决策陷阱）：当用户说"内容写入飞书" + "保留内容" + "优化图表展示"时，这是**有微妙冲突**的双重要求——"不修改"和"优化"是反向的。正确处理：
+
+    - **内容字面 1:1 保留**：用户文字、所有标点、占位符语义都不动
+    - **结构/样式可以优化**：表格升级为飞书原生 `<table>`、代码块加 `lang` 属性、关键提示升级为 callout
+    - **明确告诉用户"做了一处微调"**：占位符转义是必须的（飞书会吞掉未转义的 `<name>`），但**显示结果与原内容字面一致**——这点必须让用户知道
+
+    **如果用户明确说"源码字符也 1:1 不变"**：走 Markdown 模式直发，跳过 DocxXML 转换。
+
 ## 验证清单
 
 - [ ] 已加载 `lark-doc` skill 并读取 `references/lark-doc-xml.md`
@@ -370,6 +411,7 @@ content = result['content']  # KeyError
 - [ ] Callout 映射正确（emoji、background-color、border-color）
 - [ ] 行内样式嵌套顺序正确（`<a> → <b> → <em> → <del> → <u> → <code> → <span>`）
 - [ ] 文本特殊字符已转义（`&lt;` `&gt;` `&amp;`）
+- [ ] 占位符已按目标模式（Markdown/DocxXML）正确转义（见陷阱 15）
 - [ ] 表格包含 `<colgroup>`、`<thead>`（含 `background-color`）和 `<tbody>`
 - [ ] 章节间已插入 `<hr/>`
 - [ ] 文档总长度 > 4000 字符时已规划分批追加策略

@@ -44,8 +44,8 @@ lark-cli drive permission.members transfer_owner \
 
 ## 验证
 
-转移后查询权限确认成功：
+转移后用 `auth` 子命令确认 bot 仍有权限（`list` 子命令不存在，别写错）：
 
 ```
-lark-cli drive permission.members list <file_token> --params '{"type":"docx"}'
+lark-cli drive permission.members auth --params '{"token":"<file_token>","type":"docx","action":"view"}'
 ```
