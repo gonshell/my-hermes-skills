@@ -42,6 +42,12 @@ metadata:
 
 > **2026-06-09 实测补充**：search/type API 可用（412 是 anti-bot 节流，retry 即可）/ search/all/v2 的 play 字段始终为 0 / `/x/web-interface/popular` 是被忽略的热门源 / "Ai教程"是 Adobe Illustrator 假阳性。详见 `<references/bilibili-ai-trending-pitfalls.md>`
 
+> **2026-06-10 实测补充**：
+> - `STAYC 'GPT' MV` 是 K-pop 假阳性（UP主 STAYC_official），单 `GPT` 关键词会误中。**必须配合 STAYC 黑名单二次过滤**。
+> - `ChatGpt`（小写 p）是用户常用大小写变体，关键词列表必须同时含 `ChatGPT` / `ChatGpt` / `chatgpt` 三个变体。
+> - **不要**用 `'GP T'`（带空格）作为子串检查来"过滤 ChatGPT"——这会**误杀**所有无空格的 ChatGPT 标题（如"ChatGpt充值完整教程"），丢真实 AI 内容。
+> - 关键词列表补全：`kimi/Grok/grok/Token/MoE/llama/ComfyUI/LoRA/Suno/MCP/LangChain/深度学习/扩散` 等缺失词条会导致 30+ 真实 AI 视频被滤掉。
+
 ### Bilibili 全站热门 → `bilibili-trending`
 
 获取 Bilibili 全站热门视频，与 AI 热门不同的全站综合排名。
@@ -65,7 +71,7 @@ output_path = os.path.join(output_dir, "bilibili-trending.xml")
 
 > ⚠️ `owner.name` 和 `owner.uname` 可能同时为空，需调用 `/x/web-interface/view?bvid=xxx` 补全。
 
-详见 `<references/bilibili-trending.md>`
+详见 `<references/bilibili-trending.md>`（文档结构 + XML 格式）+ `<references/bilibili-trending-reproduction.md>`（curl 复现命令，含 2026-06-10 修正：terminal curl 重新可用、综合评分冲突澄清、cron job XML 根节点兼容性说明）
 
 ### 飞书文档映射 → `<references/feishu-doc-map.md>`
 

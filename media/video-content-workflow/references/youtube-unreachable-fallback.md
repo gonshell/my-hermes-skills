@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新）
 
 ## 背景
 
@@ -28,10 +28,45 @@ https://www.bing.com/videos/search?q=AI+shorts+GPT+Claude+Gemini+2026+viral
 https://www.bing.com/videos/search?q=AI+大模型+热门+2026
 ```
 
-### 数据提取方式
+### 数据提取方式（2026-06-10 实测修正）
 
-用 `browser_navigate` 打开搜索页 → `browser_snapshot` 读取结果，或用 `browser_console` 执行 JS 提取结构化数据（标题、播放量、时长、上传时间、频道）。
-Bing 视频搜索结果页面渲染稳定，snapshot 通常可获取 10-20 条结果。
+⚠️ **Bing 视频搜索页 `a.textContent` 返回空字符串** — 即使用 `browser_console` 抓 `document.querySelectorAll('main a')` 拿到的 `textContent` 字段全部是空，无法通过 JS 提取出标题/播放量/时长/频道。可能是 Bing 用 Shadow DOM 或动态渲染注入文本。`browser_console` 走 JS 路径行不通。
+
+**正确流程**：直接读 `browser_snapshot` 输出的可访问性树文本，再正则解析：
+
+1. `browser_navigate` 打开搜索页
+2. `browser_snapshot full=true` 拿到完整可访问性树（含中文 "已浏览 X 次"、"上传人: XXX"、"上传时间: XXX" 等结构化文本）
+3. 按 link "..." 段解析，正则提取 `已浏览 ([0-9.]+[万亿]?) 次` / `时长: ([^·]+?) ·` / `上传人: ([^·]+?) ·` / `上传时间: ([^·]+?) ·`
+
+**解析代码模板**（Python）：
+
+```python
+import re
+
+def parse_dur(s):
+    # "44 分钟29 秒" -> "44:29", "1 分钟26 秒" -> "1:26"
+    s = s.replace(" 分钟", ":").replace(" 秒", "").strip()
+    parts = s.split(":")
+    if len(parts) == 2:
+        return f"{parts[0]}:{parts[1].zfill(2)}"
+    return s
+
+# 每条 link 的文本格式：
+#   标题
+#   来源: YouTube · 时长: 44 分钟29 秒 · 已浏览 7.1万 次 · 上传时间: 2 天之前 · 上传人: ABC News In-depth · 单击以播放。
+
+for block in blocks:
+    lines = block.split("\n")
+    if len(lines) < 2: continue
+    title = lines[0].strip()
+    info = " ".join(lines[1:])
+    m_views = re.search(r"已浏览\s*([\d.]+\s*[万亿]?)\s*次", info)
+    m_dur = re.search(r"时长:\s*([^·]+?)\s*·", info)
+    m_chan = re.search(r"上传人:\s*([^\s][^·]+?)\s*·\s*单击以播放", info)
+    m_time = re.search(r"上传时间:\s*([^·]+?)\s*·", info)
+```
+
+**注意**：snapshot 默认会截断到约 30 行完整内容；如需更多，调用 `browser_snapshot full=true`，或滚动页面后再次 snapshot 增量。Bing 单页通常 12-20 条结果，够用。
 
 ### 局限性
 - 部分条目无精确播放量（无 → 用 `—` 占位，不要编造）
@@ -78,16 +113,15 @@ https://search.bilibili.com/all?keyword=AI+2026-06-01&search_type=video&order=pu
    JSON.stringify(bvids.slice(0, 25));
    ```
 
-2. 对每个 BVID 调用 `https://api.bilibili.com/x/web-interface/view?bvid=xxx` 拿真实标题、频道、播放量、时长、发布时间：
-   ```bash
-   curl -s "https://api.bilibili.com/x/web-interface/view?bvid=BVxxx" -A "Mozilla/5.0" | python3 -c "
-   import sys, json
-   d = json.load(sys.stdin)['data']
-   print(f\"{d['title']}\t{d['owner']['name']}\t{d['stat']['view']}\t{d['duration']}\t{d['pubdate']}\")
-   "
-   ```
+2. ~~对每个 BVID 调用 `https://api.bilibili.com/x/web-interface/view?bvid=xxx` 拿真实标题~~ — **2026-06-10 实测：`/x/web-interface/search/type` 和 `/search/all/v2` 端点即使带 `Referer: https://search.bilibili.com/` 头也直接返回 HTML 搜索页**（被反爬拦截，不返回 JSON）。`/x/web-interface/view?bvid=xxx` 单视频接口当前仍可用但 search 接口已废。
 
-   返回字段：`title / owner.name / stat.view / duration / pubdate`。
+   **修正后的真实数据来源**：直接读 `browser_snapshot` 输出的 Bilibili 搜索页可访问性树。Snapshot 里 B 站视频卡片**保留了真实标题**（不像 YouTube 那种被遮盖的情况），格式如：
+   ```
+   - link "Anthropic 推出 Claude Fable 5 及 Claude Mythos 5【AI 早报 2026-06-10】 3.7万 45 04:17"
+       - link "Anthropic 推出 Claude Fable 5 及 Claude Mythos 5【AI 早报 2026-06-10】"
+       - link "橘鸦Juya · 10小时前"
+   ```
+   解析规则：标题在 link 文本前面，数字串是 `{播放量} {弹幕数} {时长}`，频道和上传时间在第二个 link 里。
 
 3. 按 `pubdate` 降序得到"当日新发"，按 `stat.view` 降序得到"最热门"。
 

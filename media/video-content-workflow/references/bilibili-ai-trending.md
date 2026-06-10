@@ -39,19 +39,57 @@ GET https://api.bilibili.com/x/web-interface/ranking/v2?type=all
 - **按 AI 关键词过滤**后取 TOP 15 长视频 + TOP 7 小视频
 - `owner.name` / `owner.uname` 可能同时为空，需批量调用 `/x/web-interface/view?bvid=xxx` 补全
 
-### AI 关键词列表（过滤用，2026-06 更新）
+## AI 关键词列表（过滤用，2026-06-10 实测更新）
 
+```python
+ai_title_keywords = [
+    'AI', '人工智能', '大模型', 'ChatGPT', 'ChatGpt', 'chatgpt',
+    'DeepSeek', 'deepseek', 'Claude', 'claude', '机器学习', '神经网络',
+    'LLM', 'llm', 'Qwen', 'qwen', 'Kimi', 'kimi', 'Gemini', 'gemini',
+    '文心', '通义', '智谱', 'AIGC', 'aigc', '智能体', '深度学习',
+    'Sora', 'sora', 'OpenAI', 'openai', 'Copilot', 'copilot',
+    'GPT-4', 'GPT4', 'GPT 4', 'GPT5', 'GPT3',
+    'Stable Diffusion', 'Midjourney', 'o1推理', 'LangChain', 'langchain',
+    'PyTorch', 'pytorch', '吴恩达', 'Suno', 'suno',
+    'Transformer', '扩散', 'RAG', 'rag', 'LLaMA', 'llama',
+    'ComfyUI', 'LoRA', '多模态', 'MoE', 'RLHF', 'DPO', 'GRPO',
+    'MCP', 'token', 'Token', 'Grok', 'grok', 'Agent', 'agent',
+    'deep learning'
+]
 ```
-AI, 人工智能, 大模型, ChatGPT, DeepSeek, Claude, GPT, 机器学习,
-神经网络, LLM, Qwen, Kimi, Gemini, 文心, 通义, 智谱, AIGC,
-Agent, 智能体, Chatbot, BOT, 语言模型, 深度学习,
-Sora, OpenAI, Copilot, GPT-4, Stable Diffusion, Midjourney,
-o1, 推理模型, LangChain, PyTorch, 吴恩达, 上海交大
+
+> **大小写敏感性实测（2026-06-10）**：
+> - `ChatGpt`（小写 p）必须包含 —— 用户标题常用这种写法
+> - `ChatGPT` / `chatgpt` / `ChatGpt` 三个变体都要覆盖
+> - `DeepSeek`（驼峰）匹配，全小写 `deepseek` 也是合法标题
+> - `Claude` / `claude`、`GPT-4` / `GPT4` / `GPT 4` 都要带
+> - 单 `GPT` 字符串会误中 K-pop 歌曲（见下面 Pitfall），需配合黑名单
+
+## ⚠️ Pitfall：必须用黑名单处理 K-pop "GPT" 假阳性（2026-06-10 实测）
+
+`STAYC 'GPT' MV` 是 K-pop 女团 STAYC 的歌曲，标题含 "GPT" 但**与 AI 无关**。类似情况：
+- `STAYC_official` UP 主的所有视频
+- 其他 K-pop 团体以 "GPT" 等 AI 缩写为歌名的内容
+
+**解法**：在关键词过滤后加黑名单二次过滤：
+```python
+def is_ai_title(title):
+    t = title
+    if 'STAYC' in t:                                    # K-pop GPT 假阳性
+        return False
+    if '健身' in t and 'AI' not in t and 'GPT' not in t:  # 健身教程假阳性
+        return False
+    if ('玄戒' in t or '小米自研' in t) and 'AI' not in t: # 芯片评测假阳性
+        return False
+    for kw in ai_title_keywords:
+        if kw in t:
+            return True
+    return False
 ```
 
-> 注意：`DeepSeek` 要用正确大小写，`Deepseek`（全小写）不匹配。GPT-4 要带连字符。
+**反例**（不要这样写）：用 `'GP T'`（带空格）作为子串检查来"过滤 ChatGPT"——这会**误杀**所有标题中无空格的 ChatGPT 教程（如"ChatGpt充值完整教程"）。2026-06-10 第一次跑就用这个 bug 丢了一个真实 AI 教程。
 
-### 综合评分算法（排行榜 API 用）
+## 综合评分算法（排行榜 API 用）
 
 ```
 score = play × 0.01 + like × 0.5 + favourite × 0.8 + danmu × 0.3
@@ -98,9 +136,8 @@ def search_bilibili(keyword, page=1):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return json.loads(result.stdout)
 
-ai_keywords = ['AI', '人工智能', '大模型', 'ChatGPT', 'DeepSeek', 'Claude', 'GPT',
-               '机器学习', '神经网络', 'AIGC', 'GPT-4', 'OpenAI', 'Sora', 'LLM',
-               '文心', '通义千问', '智谱', 'Copilot', '多模态', '深度学习', '吴恩达']
+# 完整关键词列表见上面"AI 关键词列表"一节
+ai_keywords = ai_title_keywords
 
 all_results = []
 seen_bvid = set()
@@ -115,6 +152,9 @@ for kw in ai_keywords:
                     if bvid and bvid not in seen_bvid:
                         seen_bvid.add(bvid)
                         title = item.get('title', '').replace('<em class="keyword">', '').replace('</em>', '')
+                        # 应用 is_ai_title 黑名单二次过滤
+                        if not is_ai_title(title):
+                            continue
                         all_results.append({
                             'title': title,
                             'bvid': bvid,
@@ -130,6 +170,7 @@ for kw in ai_keywords:
 - **按 `play`（播放量）降序排序**后取 TOP 15 长视频 + TOP 7 小视频
 - `execute_code` 比 `terminal` 更适合运行多行 Python 脚本（无 shell 转义问题）
 - 标题中的 `<em class="keyword">` 和 `</em>` HTML 标签需要替换
+- **必须应用 `is_ai_title` 黑名单二次过滤**，避免 K-pop "GPT"、健身教程、芯片评测等假阳性
 
 ### 方法2：排行榜 API（备选）
 
@@ -160,6 +201,7 @@ bilibili热门视频 AI人工智能 大模型 2025 site:bilibili.com
 ## 文档结构（写入飞书格式）
 
 ```xml
+<BilibiliAITrending>
 <title>Bilibili AI热门视频</title>
 <h1>Bilibili AI热门视频 · {当日日期}</h1>
 <h2>热门长视频 TOP 15</h2>
@@ -178,7 +220,10 @@ bilibili热门视频 AI人工智能 大模型 2025 site:bilibili.com
     UP主：xxx ｜播放：xxx ｜点赞：xxx ｜时长：xxx
   </li>
 </ol>
+</BilibiliAITrending>
 ```
+
+> **根节点包装**：2026-06-10 cron prompt 规定使用 `<BilibiliAITrending>...</BilibiliAITrending>` 自定义根节点。lark-cli 会上报 `degrade_code=4007`（"Unsupported tag <BilibiliAITrending> was escaped"），**这是非致命**——`ok: true`、文档写入成功、目录正常生成。内部 `<h1>/<h2>/<ol>/<li>` 等标签照常解析。
 
 > ⚠️ 文档标题固定为 `<title>Bilibili AI热门视频</title>`，**不要加档期后缀**（如"晚间档"），由 cron job prompt 根据日期生成 h1。
 
