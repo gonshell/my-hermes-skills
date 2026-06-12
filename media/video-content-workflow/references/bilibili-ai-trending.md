@@ -73,7 +73,7 @@ ai_title_keywords = [
 
 **解法**：在关键词过滤后加黑名单二次过滤：
 ```python
-def is_ai_title(title):
+def is_ai_title(title, up=""):
     t = title
     if 'STAYC' in t:                                    # K-pop GPT 假阳性
         return False
@@ -81,6 +81,12 @@ def is_ai_title(title):
         return False
     if ('玄戒' in t or '小米自研' in t) and 'AI' not in t: # 芯片评测假阳性
         return False
+    # 2026-06-12 新增：AI 产品名作为"角色名"假阳性（叉寄系列用"豆包"做角色）
+    drama = ["想教我", "大小姐", "少爷", "相亲", "打牌", "谈恋爱", "分手"]
+    ai_products = ["豆包", "Kimi", "通义", "文心一言", "ChatGPT", "DeepSeek", "Claude"]
+    if any(d in t for d in drama) and any(p in t for p in ai_products):
+        if not any(ctx in t for ctx in ["教程", "Prompt", "提示词", "API", "注册", "使用", "怎么用"]):
+            return False
     for kw in ai_title_keywords:
         if kw in t:
             return True

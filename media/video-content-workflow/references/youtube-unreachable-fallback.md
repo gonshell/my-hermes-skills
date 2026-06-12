@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异）
 
 ## 背景
 
@@ -28,11 +28,84 @@ https://www.bing.com/videos/search?q=AI+shorts+GPT+Claude+Gemini+2026+viral
 https://www.bing.com/videos/search?q=AI+大模型+热门+2026
 ```
 
-### 数据提取方式（2026-06-10 实测修正）
+### 关键词选择决定返回结果语言（2026-06-11 晚间档实测）
 
-⚠️ **Bing 视频搜索页 `a.textContent` 返回空字符串** — 即使用 `browser_console` 抓 `document.querySelectorAll('main a')` 拿到的 `textContent` 字段全部是空，无法通过 JS 提取出标题/播放量/时长/频道。可能是 Bing 用 Shadow DOM 或动态渲染注入文本。`browser_console` 走 JS 路径行不通。
+⚠️ **Bing 视频搜索会根据关键词语言自动地域化结果**。泛英文关键词 `AI LLM GPT Claude OpenAI Gemini trending 2026 June` 在中文网络出口下返回的 30 条结果里**约 50-60% 是日文频道**（3分でわかる海外AI / AI大学 / いまにゅのAIプログラミング塾 / 風花のAI活用ログ 等），剩下 30% 中文假货/无关 + 20% 英文优质结果。直接拿这些当"全球热门"会大幅拉低质量。
 
-**正确流程**：直接读 `browser_snapshot` 输出的可访问性树文本，再正则解析：
+**修正策略 — 用具体英文主题词而非泛关键词**：
+
+| 想拿到的内容 | 关键词模板 | 2026-06-11 实测命中率 |
+|---|---|---|
+| 英文高质量 AI 视频 | `WWDC 2026 Apple Intelligence Siri review` / `Claude Opus review` / `GPT news AI trending` 等**具体事件+产品**词 | 30 条里 25+ 条英文优质 |
+| 日文 AI 频道 | `AI 最新 ニュース 2026` / `ChatGPT 活用術` | 几乎全是日文 |
+| 中文 AI 内容 | `AI 大模型 热门 2026` | 几乎全是中文 |
+| 泛英文 AI 趋势 | `AI LLM GPT Claude trending` | **命中率不可控**，不推荐 |
+
+### Bing 关键词实际差异比预期小（2026-06-12 早间档实测修正）
+
+> ⚠️ **2026-06-12 早间档实测反例**：连续 3 个不同关键词的 Bing 视频搜索结果**前 10 条几乎完全相同**（同一批视频卡片，仅排序微调）：
+>
+> | 关键词 | 前 5 条命中重合度 |
+> |---|---|
+> | `AI+LLM+GPT+Claude+Gemini+trending+2026+June` | Inside Anthropic / The dark side of AI / Top 3 AI platform updates / What Is AI? / Getting Real about WWDC |
+> | `AI+agent+latest+demo+GPT+Claude+viral` | 同样的 5 条 |
+> | `AI+trending+June+12+2026` | 同样的 5 条 |
+>
+> Bing 视频搜索在中文网络出口下对"AI 热门"语义做了高度聚类，前 10 条几乎是固定池。这**反驳了上面"换关键词拿更多结果"的说法**。
+>
+> **真实能扩量的方式**：
+> - **访问第二页**：`&first=31` 偏移参数（**经验证有效**，2026-06-11 笔记也提到，但 2026-06-12 实测第二页 14 条几乎全是无关杂项 / Apple Watch 老视频，性价比低）
+> - **换完全不同主题的具体事件词**（如 `Anthropic+Claude+Gemini+AI+news+today`、`Apple+WWDC+2026+keynote+Siri+AI`、`OpenAI+GPT-5+latest+news`）— 但**注意这类查询可能返回 1 个月前 / 1 年前的旧视频**（Anthropic 3 个月前、OpenAI 2024 年 GPT-4o demo），要按"上传时间"过滤，否则会拿到假新发
+> - **跨平台拼**：Bing 凑长视频 + Bilibili 凑当日新发（已推荐过的方案仍然最稳）
+>
+> **早间档 06:00 CST 的可行策略**：
+> 1. 1 次泛 Bing 查询（`AI+LLM+GPT+Claude+OpenAI+Gemini+trending+2026`）→ 凑齐长视频 TOP 10 + 短视频 TOP 5
+> 2. 1 次 Bilibili `AI早报` 按发布日期搜索 → 凑齐当日新发 TOP 10
+> 3. **不再尝试第二组 Bing 关键词**（浪费时间且结果重复）
+> 4. Bing 视频"上传时间"含"X 小时之前"或"X 天之前"都算"近期"，不要严格卡"今天/昨天"
+
+### 拿更多结果的正确方式
+
+- **直接访问第二页**：`&first=31` 偏移参数
+- **跨平台补量**：Bing 凑长视频，Bilibili 凑当日新发（最稳）
+- **不要**靠点"展开"按钮扩量
+
+### Bing 展开按钮对虚拟列表无效（2026-06-11 实测）
+
+点页面底部"展开"按钮后再抓 `aria-label` 列表，**返回的结果与点击前完全一致**（同 30 条，无新增）。Bing 视频结果用虚拟列表 + 滚动加载，按钮只是滚动到下一页锚点，DOM 中不新增 `<a>` 节点。
+### 拿更多结果的正确方式
+
+- **直接访问第二页**：`&first=31` 偏移参数
+- **跨平台补量**：Bing 凑长视频，Bilibili 凑当日新发（最稳）
+- **不要**靠点"展开"按钮扩量
+
+### 数据提取方式（2026-06-11 实测修正：aria-label 路径最优）
+
+✅ **2026-06-11 实测**：`browser_console` 走 `aria-label` 路径完全可用且最稳定。每条视频卡片是一个带 `aria-label` 的 `<a>`，标签文本用 `·` 分隔，结构固定：
+
+```javascript
+// 抓所有视频卡片（约 20-30 条 / 页）
+Array.from(document.querySelectorAll('a[aria-label*="来源"]')).slice(0, 30).map(a => {
+  const parts = a.getAttribute('aria-label').split('·').map(s => s.trim());
+  return {
+    title: parts[0],
+    source: (parts.find(p=>p.startsWith('来源:'))||'').replace('来源:','').trim(),
+    duration: (parts.find(p=>p.startsWith('时长:'))||'').replace('时长:','').trim(),
+    views: (parts.find(p=>p.startsWith('已浏览'))||'').replace('已浏览','').trim(),
+    uploaded: (parts.find(p=>p.startsWith('上传时间:'))||'').replace('上传时间:','').trim(),
+    uploader: (parts.find(p=>p.startsWith('上传人:'))||'').replace('上传人:','').trim()
+  };
+}).filter(v => v.title);
+```
+
+**关键发现**：
+- `a.textContent` 仍可能为空（Bing 用 Shadow DOM / 虚拟列表），**但 `aria-label` 是真实的**——无障碍标签不会被覆盖。
+- `a.href` 是 `https://www.bing.com/videos/riverview/relatedvideo?q=...`（Bing 相关视频查看器），**无法跳到 YouTube 原页**。
+- **XML 链接用 Bing search URL 替代**：`https://www.bing.com/videos/search?q={urlquote(title)}`（与 2026-06-10 早间档格式一致），用户点击后在 Bing 搜到原视频。
+
+### 数据提取方式（snapshot 路径，已被 aria-label 取代，保留作降级）
+
+直接读 `browser_snapshot` 输出的可访问性树文本，再正则解析：
 
 1. `browser_navigate` 打开搜索页
 2. `browser_snapshot full=true` 拿到完整可访问性树（含中文 "已浏览 X 次"、"上传人: XXX"、"上传时间: XXX" 等结构化文本）
@@ -124,6 +197,15 @@ https://search.bilibili.com/all?keyword=AI+2026-06-01&search_type=video&order=pu
    解析规则：标题在 link 文本前面，数字串是 `{播放量} {弹幕数} {时长}`，频道和上传时间在第二个 link 里。
 
 3. 按 `pubdate` 降序得到"当日新发"，按 `stat.view` 降序得到"最热门"。
+
+> **2026-06-11 实测修正**：当 B 站搜索 URL 带 `&search_type=video` 时，**`browser_console` 走 `a[href*="/video/BV"]` 路径可同时拿到真实 BVID 和真实标题**（h3.textContent 是干净的），不再需要 snapshot 解析：
+> ```javascript
+> Array.from(document.querySelectorAll('a[href*="/video/BV"]')).slice(0, 15).map(a => ({
+>   href: a.href,
+>   title: (a.querySelector('h3')?.textContent || '').trim()
+> }));
+> ```
+> 这一结论只对 `?search_type=video&...` 路径有效；`/all?...` 通用搜索页仍被遮盖（h3 是 "稍后再看{播放量}{时长}"），需用上面 snapshot 方案。
 
 > **不要尝试 Bing 视频搜索的 RSS feed**：`/videos/feed?format=rss` 会 301 到 `cn.bing.com` 然后被改写成 HTML 搜索页，不会返回 RSS。用 `browser_navigate` + `browser_console` 走 HTML 路径。
 

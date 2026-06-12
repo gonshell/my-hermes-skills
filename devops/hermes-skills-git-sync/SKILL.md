@@ -19,6 +19,12 @@ Do NOT use this skill for:
 - Cross-machine skill installation (use `hermes skills install`).
 - Diffing two skill directories (use `diff -rq` directly).
 
+## Support files
+
+- `scripts/sync.sh` — drop-in bash script implementing the full sequence
+  below. Cron-suitable (uses `set -euo pipefail`, absolute paths, exits
+  non-zero on failure).
+
 ## Path resolution (pitfall — read first)
 
 The cron/sandbox environment often sets `$HOME` to a sandbox path like `~/.hermes/home/`, NOT the real user home. `~/github/my-hermes-skills/` will then resolve to a non-existent directory.
@@ -49,25 +55,38 @@ cd "$REPO" || { echo "FATAL: repo not found at $REPO"; exit 1; }
 # 1. Pull latest (cron job may run on multiple machines)
 git pull origin main
 
-# 2. Detect drift
-diff -rq "$SRC" "$REPO" \
-  | grep -vE "^\.git|Only in .*: \.(git|archive)$" \
-  | head -200
+# 2. Dry-run preview of what rsync WOULD change
+#    (catches symlink drift, stale files in DST, etc.)
+rsync -ain --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
 
-# 3. Mirror (cp -r is correct; rsync -a is also fine)
-cp -r "$SRC"/. "$REPO"/
+# 3. Mirror with rsync --delete so orphaned entries in DST
+#    (skills deleted/archived in SRC) are removed automatically.
+#    cp -r would NOT do this — it only overlays new content and
+#    leaves stale files (e.g. an old symlink in repo root) forever.
+rsync -a --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
 
-# 4. Filter runtime noise via .gitignore (see below)
-#    .gitignore must live in the repo root
+# 4. Verify (the only diff remaining should be the excluded .gitignore)
+diff -rq "$SRC" "$REPO" --exclude='.git' --exclude='.gitignore'
 
-# 5. Commit + push
-cd "$REPO"
+# 5. Stage and commit
 git add .
 git -c user.email="hermes@local" \
     -c user.name="hermes-cron" \
     commit -m "sync: $(date +%Y-%m-%d)" || echo "Nothing to commit"
 git push origin main
 ```
+
+### Why rsync --delete (not cp -r)
+
+The original prompt this skill was extracted from said `cp -r` in step 4.
+That instruction is buggy: if a skill is deleted in SRC (or moved into
+`.archive/`), `cp -r` leaves the stale copy in REPO until someone manually
+removes it. Real-world example: the `mmx-cli` symlink sat in the DST repo
+root for weeks because the SRC copy had been moved into `.archive/`.
+
+`rsync -a --delete` is a one-way true mirror — DST ends up identical to SRC
+modulo the excluded `.git/` and `.gitignore`. This is what you want for a
+backup repo.
 
 ## .gitignore (required — add once at repo init)
 
@@ -96,12 +115,14 @@ venv/
 
 ## Pitfalls
 
-- **`cp -r` "not copied" warnings on symlinks are NOT errors.** Skills like `lark-*` are symlinks to `~/.agents/skills/`; cp prints "identical (not copied)" when both sides point to the same target. Ignore.
+- **`rsync` reports `*deleting` items in dry-run that are pure DST cruft.** Expected — those are exactly the files `--delete` will remove. Read the dry-run output, don't panic.
+- **rsync will NOT follow broken symlinks (and will warn).** That's correct — skills like `lark-*` are symlinks into `~/.agents/skills/`; if the target exists, rsync syncs the link. If the target is missing on the DST side, `diff -rq` will report "No such file" — that's the symlink pointing into the user's own filesystem, not a sync failure.
 - **`.archive/` is user-archived content.** It IS skill content (just superseded), so it SHOULD be synced. The .gitignore above intentionally does NOT exclude it.
 - **`git -c user.email/name` flags beat relying on global git config** — cron environments often have no global identity set, leading to "Please tell me who you are" errors.
 - **Empty commits are fine to skip** — wrap the commit in `|| echo "Nothing to commit"` so the cron doesn't fail when there are no changes.
-- **The sandbox `$HOME` gotcha** (see Path resolution above) bites every fresh cron invocation. Detect via `echo $HOME` before any `cd ~`.
+- **The sandbox `$HOME` gotcha** (see Path resolution above) bites every fresh cron invocation. Detect via `echo $HOME` before any `cd ~`. In this profile `$HOME=/Users/xiesg/.hermes/home` so `~` resolves to a non-existent `github/` subdir.
 - **Never `git push --force`** — this is a backup repo. Force pushes destroy history other machines may have pushed.
+- **The `.gitignore` excludes runtime metadata from `git add`, but rsync still copies them to the working tree.** That's correct — the DST repo is a full mirror on disk; git is just the history. The `.usage.json`, `.hub/`, `.curator_state/` files will live in the working tree untracked.
 
 ## Verification
 
