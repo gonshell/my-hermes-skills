@@ -1,8 +1,8 @@
 # bilibili-trending 复现命令（2026-05-30 实测，2026-06-05 更新）
 
-> ⚠️ **2026-06-10 重要修正**：`terminal curl` 重新可用（无需 browser console 绕路）。上次的 -352 限流可能是临时性 IP/频率问题，2026-06-10 实测 `curl` + 完整 UA/Referer 头稳定返回 100 条。详见下方「2026-06-10 推荐流程」。
+> ⚠️ **2026-06-10 重要修正 + 2026-06-13 复核**：`terminal curl` 对 `/x/web-interface/ranking/v2` 在 2026-06-10 可用，但 **2026-06-13 22:00 CST 实测再次返回 -352**。ranking v2 的可用性不稳定——可能因 IP / 频率 / 时间段不同而变化。**不要硬赌 ranking v2 一定可用**，先用 `curl` 试一次，失败立即切到 `/x/web-interface/popular?ps=50&pn=N`（详见 pitfall #6）——popular 端点 2026-06-13 实测稳定返回 50 条/页、3 页共 150 条去重候选，比 browser console JS 绕路简单得多。
 
-> **历史信息**（2026-06-05）：`execute_code` sandbox 和 `terminal curl` 曾稳定返回 -352 限流，当时改用 browser console JS 绕路。**该 fallback 路径在 2026-06-10 已不再必要**，保留作为应急 backup。
+> **历史信息**（2026-06-05）：`execute_code` sandbox 和 `terminal curl` 曾稳定返回 -352 限流，当时改用 browser console JS 绕路。**browser console JS 在 2026-06-10 已被 popular endpoint 替代；但 2026-06-13 复核：ranking v2 又开始 -352，popular endpoint 是首选 fallback，browser console 仍可作为最后的 backup**。
 
 ## 输出文件路径（重要）
 
@@ -131,5 +131,29 @@ lark-cli docs +update --api-version v2 \
 3. **小视频时长阈值**：`duration ≤ 90` 秒为 B 站短视频惯例（≤60 太严，会漏掉 60-90s 短视频）。当前任务 cron job prompt 普遍未规定具体阈值，默认按 `≤ 90` 即可。**注意**：部分 cron job prompt 显式写 `<180 秒`（如 2026-06-12 全站热门 spec），按 prompt 规定执行即可，不要套用本 skill 的 ≤90 默认值。
 4. **XML 根节点 vs DocxXML 规范（2026-06-10 cron job 实测，2026-06-12 复核确认）**：当 cron job prompt 显式要求使用 `<BilibiliTrending>` 根节点 + `<?xml?>` 声明时（与 skill 推荐的 `<docx><body>` 包装不同），lark-cli `--command overwrite --doc-format xml` 仍返回 `ok: true`，**警告** `<?xml>` 和 `<BilibiliTrending>` 被 escape，但内部 `<h1>/<h2>/<ol>/<li>/<a>` 内容正常渲染。**结论**：cron job 的 prompt 优先级高于 skill 规范，按 prompt 要求格式输出即可，warning 可忽略。
 5. **小视频排序冲突**：`bilibili-trending.md` 说"按播放量排序"（与用户 spec 一致），`bilibili-trending-reproduction.md` 旧版说"按综合评分（play*0.4+likes*0.6）排序"。**2026-06-10 实测用户 cron job 任务规范均写"按播放量排序"**——以后按 `stat.view` 降序即可，综合评分仅在用户明确要求时使用。
-6. **popular 端点 vs ranking v2（2026-06-12 实测）**：除 ranking v2 外，`/x/web-interface/popular?ps=50&pn=N` 也是全站热门数据源，**分页参数明确**（50 条/页，可指定页码），用 `bvid` 去重即可拿到 150+ 条候选。适合 prompt 明确要求 popular endpoint 的场景。两个端点的 `data.list` 字段结构完全一致。**json 解析注意**：popular 响应含控制字符，必须 `json.loads(strict=False)`，否则会在第 20000 字节附近报 `Invalid control character`。
+6. **popular 端点 vs ranking v2（2026-06-12 首次记录 + 2026-06-13 升级为首选 fallback）**：
+   - `/x/web-interface/popular?ps=50&pn=N` 是全站热门数据源，**分页参数明确**（50 条/页，可指定页码），用 `bvid` 去重即可拿到 150+ 条候选。
+   - **2026-06-13 22:00 CST 实测**：ranking v2 再次 -352 限流，popular 端点 3 页（pn=1,2,3）共返回 150 条去重，**短视频 ≤90s 过滤后剩 15 条，可选出 TOP 7；长视频 >90s 有 135 条，足够选 TOP 15**。
+   - **首选 fallback 顺序**（2026-06-13 修正）：① curl popular 3 页 → ② browser_console JS ranking v2 → ③ 标记失败
+   - 两个端点的 `data.list` 字段结构完全一致。
+   - **json 解析注意**：popular 响应含控制字符，必须 `json.loads(strict=False)`，否则会在第 20000 字节附近报 `Invalid control character`。
+
+   ```python
+   import urllib.request, json
+   def fetch_popular(pn):
+       url = f"https://api.bilibili.com/x/web-interface/popular?ps=50&pn={pn}"
+       req = urllib.request.Request(url, headers={
+           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+           'Referer': 'https://www.bilibili.com/'
+       })
+       with urllib.request.urlopen(req, timeout=15) as resp:
+           return json.loads(resp.read().decode('utf-8'), strict=False).get('data', {}).get('list', [])
+   
+   seen, all_items = set(), []
+   for pn in (1, 2, 3):
+       for item in fetch_popular(pn):
+           if item.get('bvid') and item['bvid'] not in seen:
+               seen.add(item['bvid'])
+               all_items.append(item)
+   ```
 7. **B站合集 duration 异常（2026-06-12 实测）**：部分视频（常见于「某幻」「小潮院长」等 UP 主）是合集/多 P 合订，`duration` 字段返回 **整个合集总秒数**（如 14 小时 4 分 = 50666 秒）而非单 P 长度。按播放量排序时会因合集整体播放量高而占据 TOP 1。**当前规范默认按 stat.view 排序不动**，但若 cron job 后续要求按"单视频时长"过滤（如"≤ 30 分钟"），需先调 `/x/web-interface/view?bvid=` 取单 P 时长，或过滤 `videos == 1` 的纯单 P 视频。

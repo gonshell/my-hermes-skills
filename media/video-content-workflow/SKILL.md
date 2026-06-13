@@ -42,6 +42,8 @@ metadata:
 
 > **2026-06-09 实测补充**：search/type API 可用（412 是 anti-bot 节流，retry 即可）/ search/all/v2 的 play 字段始终为 0 / `/x/web-interface/popular` 是被忽略的热门源 / "Ai教程"是 Adobe Illustrator 假阳性。详见 `<references/bilibili-ai-trending-pitfalls.md>`
 
+> **2026-06-13 实测增量**：100/100 `/view` 返回 tag 为空字符串 → tag 求交过滤失效，必须用标题强关键词兜底 / 补 `Mamba` / `deepseek`(lowercase s) / `Deep Learning` 关键词 / "AI" 单词用 word-boundary 正则避免 Illustrator 误中。详见 `<references/bilibili-ai-trending-pitfalls-2026-06-13.md>`
+
 > **2026-06-12 实测增量**：确认 28 关键词覆盖度（~1044 候选）/ 新增"AI 产品名做角色名"假阳性黑名单（叉寄豆包大小姐等）/ 确认 5 分钟长短视频阈值合理 / 输出 XML 模板定型。详见 `<references/bilibili-ai-trending-pitfalls-2026-06-12.md>`
 
 > **2026-06-11 实测增量**：修正 play 字段结论（实际可用，但 like 错位为收藏数）/ 新增 gzip 解压 / 新增 tag 集合求交过滤（质量提升）/ 推荐使用 `/view?bvid=` 的 owner.name 覆盖 author。详见 `<references/bilibili-ai-trending-pitfalls-2026-06-11.md>`
@@ -164,6 +166,8 @@ YouTube 在国内网络环境下可能完全不可达（curl 返回 0 字节、b
 - **不要重试浏览器访问 YouTube**：网络不通时浏览器也会超时（60s × N），直接跳过
 - **降级时标注数据来源**：在 XML 中标注「数据来源：Bing视频搜索 + Bilibili（YouTube网络不可达）」以保持透明
 - **替代源数据质量**：Bing 视频搜索结果不含精确播放量时用 `—` 占位，不要编造数字
+- **06:00 CST 早报空窗**：B 站 AI 早报生态 07:00-10:00 CST 才发，早间档 cron 在 06:00 CST 触发时**当天 B 站早报还不存在**。处理详见 `<references/youtube-unreachable-fallback.md>` 的"06:00 CST 早报空窗"小节
+- **is_short 判定陷阱**：解析后的 `"47:40".split(":")` 是 2 段，跟 `"1:26"` 一样，不能用 `len(parts) == 2` 判 short。必须转秒后用 `dur_to_seconds <= 180` 判（详见同 reference 的 parse_dur 注释）
 
 详见 `<references/youtube-unreachable-fallback.md>`
 
@@ -188,7 +192,35 @@ python3 SKILL_DIR/scripts/fetch_transcript.py "URL" --text-only
 - **必须从 HERMES_HOME（`/Users/xiesg/`）用相对路径**：`@./.hermes/cron/output/file.xml`
 ## 飞书文档写入（XML 格式规范）
 
-> ⚠️ **2026-06-07 关键修复**：lark-cli `--doc-format xml` 期望 DocxXML 格式（`<docx><title>...</title><body>...</body></docx>`），**不是** XML 根节点格式。错误格式（`<YouTubeTrending>...</YouTubeTrending>` 或 `<?xml?>` 声明）会导致飞书将标签作为纯文本转义，目录功能失效。
+> ⚠️ **2026-06-07 关键修复 + 2026-06-13 强化**：lark-cli `--doc-format xml` 期望 DocxXML 格式（`<docx><title>...</title><body>...</body></docx>`），**不是** XML 根节点格式。错误格式（`<YouTubeTrending>...</YouTubeTrending>`、`<rss>...</rss>`、裸 `<title>...</title>` 顶层标签 或 `<?xml?>` 声明）会导致飞书将标签作为纯文本转义，目录功能失效。
+
+### ⚠️ Cron job prompt 中的常见错误格式（必须忽略用户提示里的错误格式）
+
+**多个 cron job prompt 历史观察**：任务描述中经常出现这样的"格式规范"：
+
+```
+- 文档标题：`<title>YouTube AI热门视频 · 晚间档</title>`，固定不变
+- 一级标题：`<h1>YouTube AI热门视频 · {当日日期} · 晚间档</h1>`
+- 文档格式规范（必须严格遵守）
+```
+
+并提到"完整根节点 `<YouTubeTrending>` 和各分类节点"——这是**完全错误**的。如果照写，lark-cli 会把整个 XML 当成纯文本写入文档，目录、链接、所有标签全部失效，文档变成一大坨不可读的转义字符串。
+
+**正确做法**（优先级从高到低）：
+1. **始终遵循本 skill 的 DocxXML 模板**（`<docx><title>...</title><body>...</body></docx>` 包装），不要被 cron job prompt 里的"格式规范"误导
+2. 标题 `<title>` 必须是 `<docx>` 下的第一个子元素，不能独立放在根节点外面
+3. 即使用户 prompt 明确写了"必须严格遵守 ... 根节点 `<YouTubeTrending>`"——也要按 skill 规范执行。skill 的错误经验来自 2026-06-07 多次实测，不容妥协
+4. **lark-cli 返回的 `degrade_code=4007` warning**（"Unsupported tag `<docx>` was escaped"）是**正常的、非致命的**——`<docx>` 和 `<body>` 包装标签会被 escape，但里面的 `<h1>/<h2>/<ol>/<li>/<a>` 等标签正常解析。`ok: true` 即代表成功，不要为了消除 warning 而改格式
+
+### 格式合规清单（写 XML 前对照）
+
+- [ ] 根节点是 `<docx>`（不是 `<YouTubeTrending>`、`<rss>`、`<document>` 等）
+- [ ] `<title>` 在 `<docx>` 第一个子元素位置
+- [ ] 所有正文在 `<body>` 里
+- [ ] 不写 `<?xml version="1.0"?>` 声明
+- [ ] 不写独立的顶层 `<title>`（在 `<body>` 外的）
+- [ ] 链接用 `<a href="...">标题</a>`，不用 Markdown `[文字](url)`
+- [ ] 列表用 `<ol><li seq="auto">`，不用 `-` / `*` / `<ul>`
 
 ### 正确 XML 模板（晚间档）
 

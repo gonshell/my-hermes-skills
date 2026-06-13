@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗）
 
 ## 背景
 
@@ -64,6 +64,19 @@ https://www.bing.com/videos/search?q=AI+大模型+热门+2026
 > 3. **不再尝试第二组 Bing 关键词**（浪费时间且结果重复）
 > 4. Bing 视频"上传时间"含"X 小时之前"或"X 天之前"都算"近期"，不要严格卡"今天/昨天"
 
+### ⚠️ 06:00 CST 早报空窗（2026-06-13 早间档实测修正）
+
+> **反例**：2026-06-13 06:01 CST 实测，Bilibili 搜 `AI 2026-06-13` 按 pubdate 排序时，**当天完全没有 AI 早报类视频**。中文 AI 早报生态（橘鸦Juya / 阿梨Aria早鸟报 / 苍痕Luca / 猫鱼论AI / AutoDove）的实际发布时间是 **07:00-10:00 CST**。早间档 cron 在 06:00 CST 触发时，当天 B 站早报**还没发布**，搜出来的是 6.12 早上的 5 条（20-22 小时前）+ 一堆不相关杂项（YOLO 教程 / 英语听力 / 信息差等）。
+>
+> **正确处理**（按"按最新排序"+"最近上传"的宽泛解释）：
+> 1. **不要等**——cron 触发就执行，没有"当日 6.13 B 站早报"是正常的
+> 2. **B 站 5 条 = 昨天 6.12 早上的早报**（6.12 07:00-10:00 发的，距今 20-23 小时），标 `上传：06-12 HH:MM` 让用户清楚时间
+> 3. **Bing 凑剩下 5 条**：用 "X 小时之前" / "1 天前" 的近期 AI 视频（与 B 站 5 条拼成 TOP 10）
+> 4. **按"上传时间"倒序排**（不是"按播放量排"）：Bing 5h > Bing 7h > Bing 10h > Bing 16h > B 站 6.12 09:45 > ... > B 站 6.12 07:10
+> 5. **晚间档 20:00 CST 才是第一个能拿到"完整当日"数据的 session**——B 站 6.13 早报基本都发完了
+>
+> **早间档不要强行只取"今天发布的"**——会只拿到 1-2 条或 0 条，远低于 TOP 10 目标。宽泛解释"最近上传" = 24-48h 内即可。
+
 ### 拿更多结果的正确方式
 
 - **直接访问第二页**：`&first=31` 偏移参数
@@ -123,6 +136,16 @@ def parse_dur(s):
     if len(parts) == 2:
         return f"{parts[0]}:{parts[1].zfill(2)}"
     return s
+
+# ⚠️ 短视频判定陷阱（2026-06-13 实测）：
+# 解析后的 "47:40".split(":") 长度 = 2，跟 "1:26" 一样都是 2 段。
+# 简单用 `len(parts) == 2` 判 short 会把 47 分钟视频也判成 short。
+# 正确做法：转秒后用 `dur_to_seconds <= 180` 判：
+#   def dur_to_seconds(s):
+#       parts = [int(p) for p in s.split(":")]
+#       if len(parts) == 2: return parts[0]*60 + parts[1]
+#       if len(parts) == 3: return parts[0]*3600 + parts[1]*60 + parts[2]
+#   is_short = dur_to_seconds(duration) <= 180
 
 # 每条 link 的文本格式：
 #   标题
@@ -208,6 +231,26 @@ https://search.bilibili.com/all?keyword=AI+2026-06-01&search_type=video&order=pu
 > 这一结论只对 `?search_type=video&...` 路径有效；`/all?...` 通用搜索页仍被遮盖（h3 是 "稍后再看{播放量}{时长}"），需用上面 snapshot 方案。
 
 > **不要尝试 Bing 视频搜索的 RSS feed**：`/videos/feed?format=rss` 会 301 到 `cn.bing.com` 然后被改写成 HTML 搜索页，不会返回 RSS。用 `browser_navigate` + `browser_console` 走 HTML 路径。
+
+> **2026-06-13 晚间档实测补充**：B 站搜索页 `a[href*="/video/BV"]` 路径返回的是**成对的重复条目**（每个视频卡片 2 个 `<a>` 节点指向同一 BVID）—— 第 1 个是带"稍后再看{播放量}{时长}"占位标题的缩略图链接，第 2 个是真实标题的标题链接。`Array.from(...).slice(0, N)` 会拿到 2N 条记录，去重时按 BVID 去重即可。同时需要挑出 title 包含真实视频名（不是"稍后再看"）的那一条用。**更稳的提取方式**：
+> ```javascript
+> var seen = {}; var out = [];
+> document.querySelectorAll('a[href*="/video/BV"]').forEach(a => {
+>   var m = a.href.match(/\/video\/(BV[A-Za-z0-9]+)/);
+>   if (!m) return;
+>   var bv = m[1];
+>   var t = (a.querySelector('h3')?.textContent || a.textContent || '').trim();
+>   if (!seen[bv]) { seen[bv] = t; out.push({bv, title: t}); }
+>   else if (t && !t.includes('稍后再看') && seen[bv].includes('稍后再看')) {
+>     // 升级为真实标题
+>     var idx = out.findIndex(x => x.bv === bv);
+>     if (idx >= 0) out[idx].title = t;
+>   }
+> });
+> JSON.stringify(out.slice(0, 15));
+> ```
+
+> **2026-06-13 实测：`browser_console` 上重 JS 链超时（30s）陷阱**。复杂的 `JSON.stringify(Array.from(document.querySelectorAll('a[aria-label*="来源"]')).filter(...).slice(0,25).map(a => { ... return {...} }), null, 2)` 链（DOM 过滤 + 切片 + map + JSON 序列化）经常会超时返回 `Command timed out after 30 seconds`。但简单的 `Array.from(...).map(...).slice(0, N).join('\n---\n')` 不超时（只提取 aria-label 字符串拼起来）。**经验法则**：console expression 避免 4 层以上链式调用 + 大对象序列化，单行控制在 200 字符内。
 
 ### 高价值频道（AI 早报系列）
 
