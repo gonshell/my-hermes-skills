@@ -19,11 +19,17 @@ Do NOT use this skill for:
 - Cross-machine skill installation (use `hermes skills install`).
 - Diffing two skill directories (use `diff -rq` directly).
 
-## Support files
+## Recommended: use the sync script
 
-- `scripts/sync.sh` — drop-in bash script implementing the full sequence
-  below. Cron-suitable (uses `set -euo pipefail`, absolute paths, exits
-  non-zero on failure).
+**For cron jobs and automated runs, always invoke `scripts/sync.sh` directly.**
+It handles everything: absolute path resolution, rsync --delete, commit, push.
+Don't re-derive the sequence manually — the script IS the canonical implementation.
+
+```bash
+bash /Users/xiesg/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
+```
+
+The manual sequence below is documented for understanding and debugging only.
 
 ## Path resolution (pitfall — read first)
 
