@@ -31,6 +31,26 @@ bash /Users/xiesg/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
 
 The manual sequence below is documented for understanding and debugging only.
 
+## Critical: symlinks in ~/.hermes/skills/
+
+**Problem:** Many skills in `~/.hermes/skills/` are **symlinks** pointing to `~/.agents/skills/`, NOT real directories. Using `rsync -a` (or `cp -r`) preserves symlinks as-is, creating a broken backup repo that's useless on other machines.
+
+**Example:**
+```bash
+$ ls -la ~/.hermes/skills/lark-doc
+lrwxr-xr-x  1 user  staff  30 Apr 25 23:58 lark-doc -> ../../.agents/skills/lark-doc
+```
+
+**Solution:** Use `rsync -aL` — the `-L` flag follows symlinks and copies the actual file content.
+
+```bash
+# Wrong - preserves symlinks as-is
+rsync -a --delete "$SRC/" "$REPO/"
+
+# Correct - follows symlinks, copies real content
+rsync -aL --delete "$SRC/" "$REPO/"
+```
+
 ## Path resolution (pitfall — read first)
 
 The cron/sandbox environment often sets `$HOME` to a sandbox path like `~/.hermes/home/`, NOT the real user home. `~/github/my-hermes-skills/` will then resolve to a non-existent directory.
@@ -63,13 +83,17 @@ git pull origin main
 
 # 2. Dry-run preview of what rsync WOULD change
 #    (catches symlink drift, stale files in DST, etc.)
-rsync -ain --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+rsync -ainL --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
 
 # 3. Mirror with rsync --delete so orphaned entries in DST
 #    (skills deleted/archived in SRC) are removed automatically.
 #    cp -r would NOT do this — it only overlays new content and
 #    leaves stale files (e.g. an old symlink in repo root) forever.
-rsync -a --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+#
+#    -aL: follow symlinks and copy real file content (CRITICAL - see symlinks section above)
+#    --ignore-errors: continue even if broken symlinks in DST can't be deleted
+#    2>/dev/null: suppress "symlink has no referent" warnings for broken symlinks in archive
+rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/" 2>/dev/null || true
 
 # 4. Verify (the only diff remaining should be the excluded .gitignore)
 diff -rq "$SRC" "$REPO" --exclude='.git' --exclude='.gitignore'
@@ -121,8 +145,9 @@ venv/
 
 ## Pitfalls
 
+- **Symlinks in source directory**: Many skills in `~/.hermes/skills/` are symlinks to `~/.agents/skills/`. Using `rsync -a` preserves these as broken symlinks in the repo. **Always use `rsync -aL`** to follow symlinks and copy real content.
+- **Broken symlinks in destination**: After running with `-aL`, old symlinks in the destination repo become broken (target no longer exists). rsync will warn "symlink has no referent" but `--ignore-errors` + `2>/dev/null || true` handles this gracefully.
 - **`rsync` reports `*deleting` items in dry-run that are pure DST cruft.** Expected — those are exactly the files `--delete` will remove. Read the dry-run output, don't panic.
-- **Symlinks are synced as-is by default (`rsync -a`).** Hermes installs some skills as symlinks (e.g. `lark-doc -> /Users/xiesg/.agents/skills/lark-doc`). With `-a`, these become absolute symlinks in the repo — they work on the origin machine but are **broken on any other machine**. If you want a truly portable backup, use `rsync -aL` (capital L follows symlinks and copies real content). Tradeoff: `-L` makes the repo larger but self-contained; `-a` keeps it small but machine-specific. The current sync.sh uses `-a` (preserve symlinks). To switch, change the rsync line in `scripts/sync.sh`.
 - **`.archive/` is user-archived content.** It IS skill content (just superseded), so it SHOULD be synced. The .gitignore above intentionally does NOT exclude it.
 - **`git -c user.email/name` flags beat relying on global git config** — cron environments often have no global identity set, leading to "Please tell me who you are" errors.
 - **Empty commits are fine to skip** — wrap the commit in `|| echo "Nothing to commit"` so the cron doesn't fail when there are no changes.
@@ -141,23 +166,14 @@ git status                    # clean working tree
 git ls-files | wc -l          # file count roughly matches SRC file count
 ```
 
-If `git status` shows untracked `.bundled_manifest`, `.usage.json`, `__pycache__/`, etc., the `.gitignore` is missing or broken — re-add it before the next commit.
-
-## Portable Backup (symlink-free)
-
-By default, `rsync -a` preserves symlinks as-is. Many Hermes skills are installed as symlinks into `~/.agents/skills/` (absolute paths like `/Users/xiesg/.agents/skills/lark-doc`). These break on other machines.
-
-To make the repo fully self-contained, edit `scripts/sync.sh` and change the rsync line:
-
+**Critical verification — check for remaining symlinks:**
 ```bash
-# Before (preserves symlinks — broken on other machines):
-rsync -a --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
-
-# After (follows symlinks — copies real content, portable):
-rsync -aL --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+find "$REPO" -type l | wc -l  # should be 0 after fix
 ```
 
-Tradeoff: `-L` makes the repo larger (~2x for symlink-heavy skill sets) but the backup actually works on a fresh machine. For a backup repo, `-L` is almost always the right choice.
+If this shows symlinks > 0, the rsync `-aL` flag is not working or the source has changed.
+
+If `git status` shows untracked `.bundled_manifest`, `.usage.json`, `__pycache__/`, etc., the `.gitignore` is missing or broken — re-add it before the next commit.
 
 ## Variants
 
