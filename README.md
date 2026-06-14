@@ -1,60 +1,45 @@
 # My Hermes Skills
 
-个人 Hermes Agent Skills 管理仓库。
+个人 Hermes Agent Skills 备份仓库，通过 cron 每日自动同步。
+
+## 同步机制
+
+- **源目录**: `~/.hermes/skills/`
+- **同步脚本**: `devops/hermes-skills-git-sync/scripts/sync.sh`
+- **执行方式**: cron 每日 23:00 自动运行
+- **同步策略**: `rsync -aL --delete`（跟随软链接，复制真实内容）
+
+## 手动同步
+
+```bash
+# 执行同步
+bash ~/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
+```
 
 ## 目录结构
 
 ```
 my-hermes-skills/
-├── scripts/
-│   └── sync-skills.sh     # 同步脚本
-├── SKILLS.md              # Skills 元数据清单
-├── social-media/
-│   └── weibo/             # 微博技能
-│       └── SKILL.md
-├── media/
-│   └── bilibili-ai-trending/
-│       └── SKILL.md
-└── ...（其他自定义 skills）
+├── .archive/                    # 已归档的 skills
+├── apple/                       # Apple/macOS 相关
+├── autonomous-ai-agents/        # AI Agent 编排
+├── creative/                    # 创意内容生成
+├── data-science/                # 数据科学
+├── devops/                      # DevOps 工具
+├── lark-*/                      # 飞书系列 skills（23 个）
+├── mlops/                       # MLOps 工具
+├── productivity/                # 生产力工具
+├── research/                    # 研究工具
+├── software-development/        # 软件开发
+├── tech-blog/                   # 技术博客
+└── ...
 ```
 
-## 同步说明
+## Skills 统计
 
-### 自动同步（推荐）
-
-```bash
-# 同步所有 skills
-./scripts/sync-skills.sh
-
-# 只同步指定 skills
-./scripts/sync-skills.sh weibo bilibili-ai-trending
-
-# 干跑模式（只显示，不复制）
-DRY_RUN=1 ./scripts/sync-skills.sh
-```
-
-### 手动同步
-
-```bash
-# 从 ~/.hermes/skills 复制到本仓库
-rsync -av --exclude='.DS_Store' ~/.hermes/skills/weibo/ ./social-media/weibo/
-```
-
-## 推荐的 .gitignore
-
-```
-.DS_Store
-*.log
-*.tmp
-__pycache__/
-```
-
-## 添加新 Skill
-
-1. 在对应分类目录下创建 skill 目录
-2. 放入 `SKILL.md`
-3. 运行 `./scripts/sync-skills.sh` 同步
-4. 提交到 Git
+- 164 个 skills 已启用
+- 23 个飞书相关 skills
+- 9 个 hub 安装的 skills
 
 ## License
 
