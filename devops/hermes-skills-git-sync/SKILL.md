@@ -122,7 +122,7 @@ venv/
 ## Pitfalls
 
 - **`rsync` reports `*deleting` items in dry-run that are pure DST cruft.** Expected — those are exactly the files `--delete` will remove. Read the dry-run output, don't panic.
-- **rsync will NOT follow broken symlinks (and will warn).** That's correct — skills like `lark-*` are symlinks into `~/.agents/skills/`; if the target exists, rsync syncs the link. If the target is missing on the DST side, `diff -rq` will report "No such file" — that's the symlink pointing into the user's own filesystem, not a sync failure.
+- **Symlinks are synced as-is by default (`rsync -a`).** Hermes installs some skills as symlinks (e.g. `lark-doc -> /Users/xiesg/.agents/skills/lark-doc`). With `-a`, these become absolute symlinks in the repo — they work on the origin machine but are **broken on any other machine**. If you want a truly portable backup, use `rsync -aL` (capital L follows symlinks and copies real content). Tradeoff: `-L` makes the repo larger but self-contained; `-a` keeps it small but machine-specific. The current sync.sh uses `-a` (preserve symlinks). To switch, change the rsync line in `scripts/sync.sh`.
 - **`.archive/` is user-archived content.** It IS skill content (just superseded), so it SHOULD be synced. The .gitignore above intentionally does NOT exclude it.
 - **`git -c user.email/name` flags beat relying on global git config** — cron environments often have no global identity set, leading to "Please tell me who you are" errors.
 - **Empty commits are fine to skip** — wrap the commit in `|| echo "Nothing to commit"` so the cron doesn't fail when there are no changes.
@@ -142,6 +142,22 @@ git ls-files | wc -l          # file count roughly matches SRC file count
 ```
 
 If `git status` shows untracked `.bundled_manifest`, `.usage.json`, `__pycache__/`, etc., the `.gitignore` is missing or broken — re-add it before the next commit.
+
+## Portable Backup (symlink-free)
+
+By default, `rsync -a` preserves symlinks as-is. Many Hermes skills are installed as symlinks into `~/.agents/skills/` (absolute paths like `/Users/xiesg/.agents/skills/lark-doc`). These break on other machines.
+
+To make the repo fully self-contained, edit `scripts/sync.sh` and change the rsync line:
+
+```bash
+# Before (preserves symlinks — broken on other machines):
+rsync -a --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+
+# After (follows symlinks — copies real content, portable):
+rsync -aL --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+```
+
+Tradeoff: `-L` makes the repo larger (~2x for symlink-heavy skill sets) but the backup actually works on a fresh machine. For a backup repo, `-L` is almost always the right choice.
 
 ## Variants
 

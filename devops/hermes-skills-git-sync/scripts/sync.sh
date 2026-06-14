@@ -16,7 +16,10 @@ cd "$REPO" || { echo "FATAL: repo not found at $REPO" >&2; exit 1; }
 git pull --ff-only origin main
 
 # 2. Mirror (rsync --delete so DST ends up identical to SRC)
-rsync -a --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+# -L: follow symlinks and copy real file content (not broken symlinks in repo)
+# --ignore-errors: continue even if broken symlinks in DST can't be deleted
+# 2>/dev/null: suppress "symlink has no referent" warnings for broken symlinks in archive
+rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/" 2>/dev/null || true
 
 # 3. Verify (only .gitignore should differ)
 LEFTOVER=$(diff -rq "$SRC" "$REPO" --exclude='.git' --exclude='.gitignore' || true)
