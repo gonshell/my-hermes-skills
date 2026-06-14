@@ -557,6 +557,7 @@ terminal(command="tmux new-session -d -s resumed 'hermes --resume 20260225_14305
 2. `hermes login` — re-authenticate OAuth providers
 3. Check `.env` has the right API key
 4. **Copilot 403**: `gh auth login` tokens do NOT work for Copilot API. You must use the Copilot-specific OAuth device code flow via `hermes model` → GitHub Copilot.
+5. **"X 通道报错" 类报告先做三步定位，不要直接归因**——(a) 抓 log 行级 provider+base_url；(b) 用 `send_message` 发自检消息验证当前 outbound 路径；(c) 区分平台错误（gateway.log 里 Feishu `Send error` 堆栈）vs 模型兜底（gateway 发的 "Transient agent failure ... persisting user message" 161 字符是 agent 流式中断后兜底，不是平台报错）。Memory 里的 provider 状态是历史快照，必须用 log 交叉验证。详见 `references/minimax-provider-debugging.md`（含 minimax vs minimax-cn 区分、auth.json 绕过读取、3 种 failure mode 区分）。
 
 ### Changes not taking effect
 - **Tools/skills:** `/reset` starts a new session with updated toolset

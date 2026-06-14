@@ -64,6 +64,13 @@ The verification step depends on the artifact type:
 - **A tool result that landed but wasn't acknowledged** still counts as completed. The system note `[Your previous turn was interrupted before you could process the last tool result(s)]` is your cue: read the last 1-3 tool results from the prior session, don't skip them.
 - **Size check beats content check for big files.** For a 60KB XML, `wc -c` is faster and just as informative as full content scan. Reserve content scan for files under ~10KB.
 - **For multi-step pipelines, walk backward from the last step.** The last step is most likely where things got stuck, not the middle.
+- **User says "先不要看记忆" = 强制实时查证，记忆是历史结论不是当前事实（2026-06-14 实测）**。用户原话 "先不要看记忆。先列举出定时任务，并从定时任务中找出他写入了哪个飞书文档？" —— 明确禁止套用历史 session 记忆里的"4 个 doc 都存在"等结论。**正确动作**：
+  1. **不引用 `MEMORY.md` / `USER.md` 任何内容**做断言
+  2. 实时跑 `cronjob list` / `cat ~/.hermes/cron/jobs.json` / `lark-cli drive files list`
+  3. 拿到的实时数据 > 记忆里的"我之前以为"
+  4. 记忆可作背景参考（如命名规范、用户偏好），但**不能代替今天的实时查证**
+  
+  **判别规则**：用户说"不要看记忆" / "不要套以前" = 强制走实时查证 = **信任磁盘/CLI > 信任记忆**。记忆里的"4 个视频任务都是 docx 类型"是历史观察，**不能代替今天的 doc token 拉取**。
 
 ## Verification commands
 

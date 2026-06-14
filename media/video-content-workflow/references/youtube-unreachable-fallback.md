@@ -1,4 +1,130 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案）
+
+## ⚠️ Cron job prompt 中的"格式规范"是错误的（2026-06-14 早间档再次确认）
+
+每个 YouTube-AI 早间档 cron 任务的 prompt 都会包含这样的"格式规范"：
+
+```
+- 文档标题：`<title>YouTube AI热门视频 · 早间档</title>`
+- 完整根节点 `<YouTubeTrending>` 和各分类节点
+- XML 文件需包含完整根节点 `<YouTubeTrending>`
+```
+
+**这段 prompt 是错的，照做会让 lark-cli 把整个 XML 当成纯文本写入，目录、链接、所有标签全部失效。** 正确做法是遵循本 skill 的 DocxXML 模板（`<docx><title>...</title><body>...</body></docx>`），`<docx>` 和 `<body>` 包装标签会被 escape（`degrade_code=4007` warning），但里面的 `<h1>/<h2>/<ol>/<li>/<a>` 等会正常解析。`ok: true` 即代表成功。详细原因和模板见 SKILL.md 顶层"飞书文档写入"一节。
+
+**结论**：**忽略 prompt 里的"完整根节点 `<YouTubeTrending>`"** 这个误导指令，永远用 `<docx><title>...</title><body>...</body></docx>`。这是第二次在 06:00 CST cron 上确认（2026-06-13 / 2026-06-14），按主 SKILL.md 的规范走就行，不要为了满足 prompt 而改用裸 XML。
+
+---
+
+## ⚠️ Bing 在 headless 浏览器下渲染不完整（2026-06-14 早间档实测）
+
+**反例**：2026-06-14 06:01 CST，`browser_navigate` 打开 Bing 视频搜索页后：
+
+- `browser_console` 抓 `a[aria-label*="来源"]` → **只返回 1 条**（页面 531px 高，DOM 几乎是导航）
+- `browser_scroll` + 反复 `browser_console` 多次 → 仍然 1 条
+- 切换不同 query（`AI+LLM+GPT+Claude+trending+2026`、`AI+agent+latest+demo+GPT+Claude+viral` 等）→ 仍然 1 条
+- 推测原因：Bing 视频搜索用了虚拟列表 + 懒加载，headless Playwright 不触发完整渲染
+
+**正确做法 — 直接 `curl` 拿 HTML**（Bing 的 HTML 是完整 server-rendered，含全部卡片）：
+
+```bash
+curl -sL --max-time 30 \
+  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+  "https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+OpenAI+Gemini+trending+2026&FORM=HDRSC6" \
+  -o /tmp/bing1.html
+# 506KB HTML, 28+ 个 aria-label="...来源..." 卡片
+```
+
+提取（grep 单行 regex 即可）：
+
+```bash
+grep -oE 'aria-label="[^"]*来源[^"]*"' /tmp/bing1.html | head -30
+```
+
+**为什么 curl 比浏览器更可靠**：
+- Bing HTML 是服务端渲染（SSR），curl 拿到的是完整 DOM
+- 浏览器路径需要等 React/Bing 虚拟列表 hydrate + 触发 IntersectionObserver，headless 模式下经常不触发
+- 同样的提取逻辑（aria-label 解析）从 curl 输出一样工作，因为 HTML 完全相同
+- 速度：curl ~2-3s，浏览器 navigate + console 反复试 60s+ 仍只 1 条
+
+**经验法则**：YouTube/Bing 视频搜索页 **curl-first**，浏览器路径留作降级。
+
+---
+
+## ⚠️ Bing 中文网络出口下结果是 bilibili 包装（2026-06-14 早间档实测）
+
+2026-06-14 06:01 CST 实测：从国内网络出口 `curl` Bing 视频搜索 HTML 时，**前 28+ 条结果几乎全部是 bilibili 源视频**（Bing 把 bilibili 视频也聚合进了视频搜索结果集）。每条 aria-label 的格式是：
+
+```
+aria-label="全网AI首拆，一台车的灵魂原来是...来源: bilibili · 时长: 9 分钟5 秒 · 已浏览 198.4万 次 · 上传时间: 06-10 21:31 · 上传人: 所长Wy · 单击以播放。"
+```
+
+而每个 `<a>` 标签的 href 区域附近，HTML 里能找到 BVID 链接：`/video/BV17SER6AEJh`。
+
+**完整提取流程**（curl → regex → BVID 列表 → B站 API 解析）：
+
+```python
+import re
+# Step 1: 从 Bing HTML 同时提取 aria-label 标题信息和 BVID
+seen = set()
+results = []
+for f in ['bing1.html', 'bing2.html', 'bing_p2.html']:
+    html = open(f).read()
+    for m in re.finditer(r'aria-label="([^"]*来源[^"]*)"', html):
+        label = m.group(1)
+        forward = html[m.end():m.end()+5000]
+        bvm = re.search(r'/video/(BV[A-Za-z0-9]{10})', forward)
+        if bvm:
+            bv = bvm.group(1)
+            if bv in seen: continue
+            seen.add(bv)
+            results.append({'bv': bv, 'label': label[:300]})
+
+# Step 2: 对每个 BVID 调 B站 /view API 拿精确数据
+import urllib.request, json
+def fetch_bv(bv):
+    req = urllib.request.Request(
+        f"https://api.bilibili.com/x/web-interface/view?bvid={bv}",
+        headers={
+            'User-Agent': 'Mozilla/5.0 ...',
+            'Referer': 'https://www.bilibili.com/',
+            'Accept-Encoding': 'identity',  # 关掉 gzip 避免手动解码
+        })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        d = json.loads(r.read())['data']
+    return {
+        'title': d['title'],
+        'owner': d['owner']['name'],
+        'view': d['stat']['view'],
+        'duration': d['duration'],  # 秒
+        'pubdate': d['pubdate'],   # unix ts
+    }
+```
+
+**关键发现**：
+- Bing 视频搜索中文出口下基本是 bilibili 镜像（数据真实、播放量真实、UP主真实）
+- 通过 BVID 走 `/x/web-interface/view?bvid=xxx` API 拿的数据是**真实权威数据**（B站官方），不需要担心 Bing 显示的播放量是估算
+- **XML 链接直接用 B站 URL**：`https://www.bilibili.com/video/{bv}/`（不要用 Bing search URL，因为视频源就是 B站）
+- 2026-06-14 实测 /view API 仍可用（之前笔记说 search 接口已废，**单视频 /view 接口没事**）
+- API 速率安全：单条 ~0.3s sleep 串行调用 60 条无问题
+
+---
+
+## 06:00 CST 早间档 推荐流程（2026-06-14 综合）
+
+确认 YouTube HTTP 000 后：
+
+1. **检测 + 跳过 YouTube 浏览器**（`curl` 一下确认，不要 60s 反复试浏览器）
+2. **curl Bing 视频搜索**（1-2 个 query，覆盖长视频 + 短视频）→ grep aria-label → 提取 BVID
+3. **curl B站搜索 `AI早报`**（按 `pubdate` 排序）→ grep BVID
+4. **对所有 BVID 批量调 `/x/web-interface/view` API**（Bing + B站 30-60 条，串行 ~0.3s sleep）
+5. **Python 内 classify + sort**：按 `duration` 切长短（阈值 180s），按 `view` 排热度，按 `pubdate` 排新发
+6. **写 XML**（DocxXML 模板，**忽略 prompt 里的 `<YouTubeTrending>` 误导**）
+7. **lark-cli 上传**（`+update --command overwrite --doc-format xml`），期望 `ok: true` + 2 个 `degrade_code=4007` warnings（无害）
+
+**总耗时**：~2-3 分钟（vs 浏览器路径 30+ 分钟且只拿 1 条）
+
+---
 
 ## 背景
 

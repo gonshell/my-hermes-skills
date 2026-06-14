@@ -219,47 +219,42 @@ Markdown:
 
 ### 第五步：发布到飞书
 
-**核心陷阱（必读）**：`--content @file` 和 `--title` 不能同时使用。`--content` 只接受内联字符串，不接受文件路径；`--title` 只在 `--markdown` 模式下有效。
+**核心陷阱（必读）**：`--content @file` 和 `--title` 同时使用会失败。`--content` 只接受内联字符串；`--title` 与 `--content` 互斥。
 
-正确做法：用 `--markdown -` 读取 stdin 管道，结合 `--title`：
+**实测可行的命令（2026-06 验证）**：
 
 ```bash
-# ✅ 正确：用 stdin 管道传入本地 .md 文件（中文内容正常）
+# ✅ Markdown 模式：飞书从首行 `# 标题` 提取（最简方式）
 cd /Users/xiesg/workspace
-cat prompting-playbook-blog.md | lark-cli docs +create --api-version v2 --doc-format markdown --title "文章标题" --markdown -
+lark-cli docs +create --api-version v2 --doc-format markdown --content @./file.md
 
-# ❌ 错误：--content @file 和 --title 同时使用会报 "unknown flag: --new-title" 或 "--content is required"
-lark-cli docs +create --api-version v2 --content @./file.md --title "标题"   # 不支持
+# ✅ XML 模式：XML 自带 <title>，不需要 --title
+lark-cli docs +create --api-version v2 --doc-format xml --content @./file.xml
 ```
 
-**三种内容传递方式：**
+**❌ 不可行的命令**：
 
-| 方式 | 适用场景 | 示例 |
-|------|---------|------|
-| `--new-title "$(head -1 {file} \| sed 's/^# //')" --content @file` | **推荐**：本地 `.md` 文件，第一行是 `# 标题` | 自动从文件第一行提取标题，不会出现"Untitled" |
-| `--markdown -`（stdin管道）+ `--title "标题"` | 无本地文件、Markdown 内容在变量中 | `cat file.md \| lark-cli docs +create --api-version v2 --doc-format markdown --title "标题" --markdown -` |
-| `--doc-format xml --content @file` | **源文件已是完整 DocxXML**（含 `<title>` 元素和 `<table>`/`<pre>` 等富块） | 不需要任何标题参数——XML 内的 `<title>` 元素会被飞书作为文档标题使用 |
+| 命令 | 报错 |
+|------|------|
+| `... --new-title "..."` | `unknown flag: --new-title`（v2 不存在） |
+| `... --content @file.md --title "..."` | `--content is required`（互斥冲突） |
+| `... --markdown @file.md` | `--markdown` flag 在 v2 不存在（仅 v1 旧 API） |
+| `... --content @/absolute/path.md` | `unsafe file path`（必须 CWD 相对路径） |
 
-**关于第三种方式的典型用法**：
+**⚠️ Mermaid 图在飞书画板中会降级失败**：源 .md 含 ```` ```mermaid ` ```` 代码块时，飞书会尝试解析为 `<whiteboard type="mermaid">` 但**渲染失败、显示为空白**（warning 2107）。Mermaid 在飞书原生不支持。
 
-当源 markdown 已通过脚本（`md_to_docx.py` 等）转成了 DocxXML，或**用户要求"保留文字内容、优化图表展示"**时，应该走这条路：
-
-```bash
-# ✅ 正确：XML 自带标题，不需要 --new-title / --title
-lark-cli docs +create --api-version v2 --doc-format xml --content @./handbook.docx.xml
-
-# XML 文件首部必须含 <title>xxx</title>，否则文档会显示为 "Untitled"
-head -1 handbook.docx.xml   # 应该是 <title>文档标题</title>
-```
-
-**关于 `--title` 的误解澄清：**
-- ❌ `--title` 不能与 `--content @file` 同时使用（会报 "unknown flag: --new-title" 或 "content is required"）
-- ✅ `--new-title` 可以与 `--content @file` 同时使用 — 它从文件内容的第一行提取标题（需要文件第一行是 `# 标题` 格式）
-- ✅ `--title` 只在 `--markdown -`（stdin 模式）下有效，用于显式指定标题字符串
+**解法**：用 mermaid.live 或 mermaid.ink 导出 PNG/SVG，**手动**在飞书文档中插入图片。本地 .md 用 Typora / VSCode + Mermaid 插件可正常显示。**发布前需告知用户："Mermaid 图表已保留在源 .md 中,但飞书文档需要手动补图"。**
 
 **长文档策略：**
-- 内容 ≤ 4000 字符 → 一次性 `--markdown -` 发布
-- 内容 > 4000 字符 → 先 `--markdown -` 创建骨架，再用 `docs +update --command append` 追加剩余章节
+- 内容 ≤ 4000 字符 → 一次性 `--content @file.md` 发布
+- 内容 > 4000 字符 → 先创建文档，再用 `docs +update --command append` 追加剩余章节
+
+**验证发布**：
+
+```bash
+# 验证文档结构（注意是 --doc 不是 --document-id）
+lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline --format pretty
+```
 
 ## 完整示例
 
@@ -337,7 +332,9 @@ head -1 handbook.docx.xml   # 应该是 <title>文档标题</title>
 
 2. **行内样式嵌套顺序错误**：飞书要求 `<a> → <b> → <em> → <del> → <u> → <code> → <span>` 的固定嵌套顺序，关闭顺序必须严格反转。顺序错误会导致样式丢失或渲染异常。
 
-4. **博客文件必须有标题字段**：本地博客草稿文件（如 `ai-school-blog-draft.md`）的第一行必须是 Markdown 标题（`# 标题文本`），发布命令用 `--new-title` 参数提取标题：`-new-title "$(head -1 {file} | sed 's/^# //')"`。如果文件第一行不是 `# 标题` 格式，文档在飞书中会显示为"Untitled"。生成后立即用 `head -1 {file}` 验证。
+4. **博客文件必须有标题字段**：本地博客草稿文件（如 `ai-school-blog-draft.md`）的第一行必须是 Markdown 标题（`# 标题文本`），发布命令省略 `--title` 参数，飞书从首行 `# 标题` 自动提取标题。如果文件第一行不是 `# 标题` 格式，文档在飞书中会显示为"Untitled"。生成后立即用 `head -1 {file}` 验证。
+
+> ⚠️ **历史更正**：旧版 SKILL 文档推荐使用 `--new-title "$(head -1 {file} | sed 's/^# //')"`，但本会话实测 `--new-title` flag 在当前 lark-cli v2 **不存在**（报 `unknown flag: --new-title`）。**正确做法是直接不传 `--title`，让飞书自动从首行 `# 标题` 提取**。这是更简单也更稳的路径。
 
 4. **Callout 内放了不支持的子块**：Callout 子块仅支持文本、标题、列表、待办、引用。不要在 Callout 内放 `<table>`、`<pre>`、`<whiteboard>` 等。
 
@@ -353,18 +350,22 @@ head -1 handbook.docx.xml   # 应该是 <title>文档标题</title>
 
 10. **@file 路径必须是 CWD 相对路径**：`--content @./file.md` 中的路径必须是当前工作目录的相对路径（`./file.md`），传绝对路径（`/Users/.../file.md`）会报 `unsafe file path` 错误。解法：先 `execute_code` 把文件写到 CWD，或 `cd` 到文件所在目录。
 
-11. **标题丢失陷阱（"Untitled"）**：当使用 `--content @file.md` 时，飞书从文件内容提取标题（取 Markdown 第一个 `# 标题` 或 XML `<title>` 标签）。如果源文件第一行不是标题行（如直接是正文段落），创建的文档会显示为"Untitled"。**发布前必须验证**：用 `head -1 {file}` 检查文件第一行是否是 `# ` 开头。不是的话先用 `execute_code` 在文件头部插入一行 `# 文档标题` 再发布。
+12. **标题丢失陷阱（"Untitled"）**：当使用 `--content @file.md` 时，飞书从文件内容提取标题（取 Markdown 第一个 `# 标题` 或 XML `<title>` 标签）。如果源文件第一行不是标题行（如直接是正文段落），创建的文档会显示为"Untitled"。**发布前必须验证**：用 `head -1 {file}` 检查文件第一行是否是 `# ` 开头。不是的话先用 `execute_code` 在文件头部插入一行 `# 文档标题` 再发布。
 
-11. **lark-cli 可能不在 PATH 中**：如果 `lark-cli` 命令找不到，尝试全路径 `/Users/xiesg/dev/cli/lark-cli`。用 `which lark-cli || find /Users/xiesg -name "lark-cli" -type f` 定位。
+13. **Mermaid 在飞书画板中渲染失败**（实测确认，2026-06）：源 .md 中的 ```` ```mermaid ` ```` 代码块会被飞书解析为 `<whiteboard type="mermaid">`，但**渲染失败并返回 warning 2107**（Whiteboard content parse failed）。Mermaid 在飞书原生不支持。**解法**：
+    - 用 mermaid.live 在线编辑器打开 mermaid 源 → 导出 PNG/SVG
+    - 在飞书文档中**手动**插入图片
+    - 本地 .md 用 Typora / VSCode + Mermaid Preview 插件可正常显示
+    - 发布前必须告知用户 Mermaid 图需手动补图
 
-12. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。**关键区分**：
+14. **bot 身份创建文档后权限问题**：以 bot 身份创建的文档，当前用户可能没有编辑权限。`permission_grant.status = "skipped"` 表示自动授权失败。如需用户编辑权限，需先用 `lark-cli auth login` 确保有用户 open_id，再重新授权。**关键区分**：
     - **查看权限**：bot 身份创建的文档，**任何打开链接的登录用户默认有查看权限**（飞书行为），不需要 `auth login`。
     - **编辑权限**：需要 `lark-cli auth login` 后用 `--as user` 身份重新授权，或由 bot 管理员在飞书文档的"分享"面板手动添加协作者。
     - 因此**如果用户只要求"打开就能看"**，bot 身份创建就够用，警告可忽略。
 
-13. **read_file 输出的文件含行号前缀**：从 read_file 读取的 `.md` 文件，行首是 `1|` `2|` 格式的行号，不是纯 Markdown。直接写入发布会导致整篇文档都是行号。**必须先 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号**，再写入临时文件。
+15. **read_file 输出的文件含行号前缀**：从 read_file 读取的 `.md` 文件，行首是 `1|` `2|` 格式的行号，不是纯 Markdown。直接写入发布会导致整篇文档都是行号。**必须先 `re.sub(r"^\s*\d+\|", "", raw)` 清除行号**，再写入临时文件。
 
-14. **execute_code 的 read_file 返回值结构与工具不同**：`execute_code` 内部 import 的 `read_file` 返回 `{"content": ..., "total_lines": N}` 是正确的，但当脚本从文件读取时，用 `open(...).read()` 直接读文件内容，**不要**试图用 `read_file` 的返回值字典的 `'content'` 键——`execute_code` 的 `read_file` 是工具不是函数，直接调用 `read_file()` 在脚本中是未定义的。正确做法：
+16. **execute_code 的 read_file 返回值结构与工具不同**：`execute_code` 内部 import 的 `read_file` 返回 `{"content": ..., "total_lines": N}` 是正确的，但当脚本从文件读取时，用 `open(...).read()` 直接读文件内容，**不要**试图用 `read_file` 的返回值字典的 `'content'` 键——`execute_code` 的 `read_file` 是工具不是函数，直接调用 `read_file()` 在脚本中是未定义的。正确做法：
 
 ```python
 # ✅ 正确：直接用 open 读文件
@@ -416,5 +417,6 @@ content = result['content']  # KeyError
 - [ ] 章节间已插入 `<hr/>`
 - [ ] 文档总长度 > 4000 字符时已规划分批追加策略
 - [ ] `lark-cli docs +create` 命令包含 `--api-version v2`
-- [ ] 发布后用 `lark-cli docs +fetch` 验证内容是否正确
+- [ ] **含 Mermaid 时**已告知用户需要手动补图（飞书原生不支持 Mermaid）
+- [ ] 发布后用 `lark-cli docs +fetch --doc <doc_id> --scope outline` 验证内容是否正确（注意是 `--doc` 不是 `--document-id`）
 - [ ] 创建成功后已返回文档 URL 给用户
