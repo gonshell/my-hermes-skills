@@ -83,7 +83,7 @@ git pull origin main
 
 # 2. Dry-run preview of what rsync WOULD change
 #    (catches symlink drift, stale files in DST, etc.)
-rsync -ainL --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
+rsync -ainL --delete --exclude='.git' --exclude='.gitignore' --exclude='README.md' "$SRC/" "$REPO/"
 
 # 3. Mirror with rsync --delete so orphaned entries in DST
 #    (skills deleted/archived in SRC) are removed automatically.
@@ -92,11 +92,12 @@ rsync -ainL --delete --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/"
 #
 #    -aL: follow symlinks and copy real file content (CRITICAL - see symlinks section above)
 #    --ignore-errors: continue even if broken symlinks in DST can't be deleted
+#    --exclude='README.md': preserve README.md that exists in DST but not in SRC
 #    2>/dev/null: suppress "symlink has no referent" warnings for broken symlinks in archive
-rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' "$SRC/" "$REPO/" 2>/dev/null || true
+rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' --exclude='README.md' "$SRC/" "$REPO/" 2>/dev/null || true
 
 # 4. Verify (the only diff remaining should be the excluded .gitignore)
-diff -rq "$SRC" "$REPO" --exclude='.git' --exclude='.gitignore'
+diff -rq "$SRC" "$REPO" --exclude='.git' --exclude='.gitignore' --exclude='README.md'
 
 # 5. Stage and commit
 git add .
@@ -145,6 +146,7 @@ venv/
 
 ## Pitfalls
 
+- **README.md deletion**: `rsync --delete` removes any file in DST that doesn't exist in SRC. If you maintain a README.md in the repo root (not in `~/.hermes/skills/`), it WILL be deleted on next sync. **Add `--exclude='README.md'`** to the rsync command.
 - **Symlinks in source directory**: Many skills in `~/.hermes/skills/` are symlinks to `~/.agents/skills/`. Using `rsync -a` preserves these as broken symlinks in the repo. **Always use `rsync -aL`** to follow symlinks and copy real content.
 - **Broken symlinks in destination**: After running with `-aL`, old symlinks in the destination repo become broken (target no longer exists). rsync will warn "symlink has no referent" but `--ignore-errors` + `2>/dev/null || true` handles this gracefully.
 - **`rsync` reports `*deleting` items in dry-run that are pure DST cruft.** Expected — those are exactly the files `--delete` will remove. Read the dry-run output, don't panic.
@@ -164,6 +166,7 @@ cd "$REPO"
 git log --oneline -3          # commit landed
 git status                    # clean working tree
 git ls-files | wc -l          # file count roughly matches SRC file count
+ls -la README.md              # README.md preserved (not deleted by rsync --delete)
 ```
 
 **Critical verification — check for remaining symlinks:**
