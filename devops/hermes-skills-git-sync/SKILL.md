@@ -146,6 +146,9 @@ venv/
 
 ## Pitfalls
 
+See also `references/cron-env-quirks.md` for known cron/sandbox environment behaviors.
+
+- **`git pull` hangs in cron/sandbox environment (2026-06-15 confirmed)**: The git data-transfer protocol hangs indefinitely in the Hermes cron sandbox, even though `ssh -T git@github.com` succeeds and `curl` to GitHub works fine. `git fetch`, `git clone`, and `git pull` all time out. Workaround: wrap in `timeout 15 git pull --ff-only origin main || true` and proceed — for a one-way local→remote sync, skipping pull is acceptable since we're only pushing. **Push still works** even when pull hangs. If you need to verify remote state, use the GitHub API instead: `curl -s https://api.github.com/repos/gonshell/my-hermes-skills/branches`.
 - **README.md deletion**: `rsync --delete` removes any file in DST that doesn't exist in SRC. If you maintain a README.md in the repo root (not in `~/.hermes/skills/`), it WILL be deleted on next sync. **Add `--exclude='README.md'`** to the rsync command.
 - **Symlinks in source directory**: Many skills in `~/.hermes/skills/` are symlinks to `~/.agents/skills/`. Using `rsync -a` preserves these as broken symlinks in the repo. **Always use `rsync -aL`** to follow symlinks and copy real content.
 - **Broken symlinks in destination**: After running with `-aL`, old symlinks in the destination repo become broken (target no longer exists). rsync will warn "symlink has no referent" but `--ignore-errors` + `2>/dev/null || true` handles this gracefully.

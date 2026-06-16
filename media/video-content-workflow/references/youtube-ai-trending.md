@@ -8,7 +8,25 @@ https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR
 
 # 最热门短视频（混合流，不加过滤器）
 https://www.youtube.com/results?search_query=AI+news+OR+LLM+OR+GPT+OR+ChatGPT+OR+Claude
+
+# 本周上传（按上传日期过滤）— 2026-06-16 新增
+https://www.youtube.com/results?search_query=<query>&sp=CAMSBAgEEAE%253D
 ```
+
+> ⚠️ **"AI" 关键词歧义**（2026-06-16 实测）：YouTube 搜索 "AI news" 返回大量 Air India 航空新闻。**推荐无歧义查询**：
+> - `artificial intelligence machine learning deep learning 2026`
+> - `ChatGPT Claude GPT LLM Gemini AI news`
+> - `AI agent tools latest news`
+> - 避免 "AI news"、"AI update"、"AI crash" 等短查询
+
+### 并行搜索策略（2026-06-16 验证高效）
+
+使用 `delegate_task` 派出 3 个并行子 agent，每个搜索不同关键词：
+1. `AI ChatGPT Claude GPT LLM` + `sp=CAMSBAgEEAE%3D`（本周上传）
+2. `artificial intelligence machine learning deep learning 2026` + `sp=CAMSBAgEEAE%3D`
+3. `AI tools agent news latest 2026` + `sp=CAMSBAgEEAE%3D`
+
+每个子 agent 用 `browser_console` 提取数据，返回 JSON。父 agent 合并去重后按播放量排序。
 
 ## 已失效URL（不要使用）
 
@@ -132,7 +150,7 @@ output_dir = "/Users/xiesg/.hermes/cron/output/"
 - 晚间档：`youtube-ai-pm_YYYY-MM-DD.xml`（pm 前缀）
 - 下划线连接日期，不用空格
 
-## 网络不可用降级（2026-06-01 更新）
+## 网络不可用降级（2026-06-16 更新）
 
 YouTube 在国内网络可能完全不可达：
 - `curl` 返回 0 字节（非超时，而是连接被重置）
@@ -141,9 +159,10 @@ YouTube 在国内网络可能完全不可达：
 
 **降级流程**（优先使用替代数据源，见完整指南）：
 1. 快速检测网络：`curl -s --max-time 10 -o /dev/null -w "%{http_code}" "https://www.youtube.com"` → HTTP 000 即不可达
-2. **优先**：用 Bing 视频搜索 + Bilibili 搜索获取真实数据填充报告
-3. **其次**：查找当日早间档文件复用
-4. **最后**：生成「数据获取失败」占位 XML 上传飞书
-5. **不要反复重试浏览器访问 YouTube**（每次 60s 超时 × N = 浪费大量时间）
+2. **优先**：curl Bing HTML → `grep -oE '/video/BV[A-Za-z0-9]{10}'` 提取 BVID → B站 `/view` API（**BVID 直取，不依赖 aria-label 语言**）
+3. **补充**：Bilibili search API（`urllib.parse.quote` 编码关键词）获取更多 BVID
+4. **其次**：查找当日早间档文件复用
+5. **最后**：生成「数据获取失败」占位 XML 上传飞书
+6. **不要反复重试浏览器访问 YouTube**（每次 60s 超时 × N = 浪费大量时间）
 
 > 完整替代数据源策略见 `<references/youtube-unreachable-fallback.md>`

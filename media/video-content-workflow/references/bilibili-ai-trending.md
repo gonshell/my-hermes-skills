@@ -25,12 +25,23 @@ def parse_duration(dur_str):
     return 0
 ```
 
-### ⚠️ search/type API — **完全废弃，返回 HTTP 412**
+### ⚠️ search/type API — **间歇性可用，存在速率限制（2026-06-16 修正）**
 
-> **结论（2026-05-30 实测）**：`https://api.bilibili.com/x/web-interface/search/type` 对**所有关键词**均返回 HTTP 412。
-> **不要依赖此 API**。
+> **2026-05-30 旧结论**（已修正）：声称"对所有关键词均返回 HTTP 412"。
+> **2026-06-16 实测**：大部分关键词返回正常 JSON（code=0），但存在间歇性失败（返回空响应体）。
+> 根因是反爬速率限制，不是 API 废弃。可用作补充数据源，需加 0.5-1s 延迟。
 
-### 排行榜 API — **备选补充**
+```bash
+GET https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={keyword}&order=click&page=1&pagesize=20
+```
+
+返回 JSON 中 `data.result[]`，字段与 search/all/v2 类似但结构更扁平：
+- `bvid`, `title`, `author`, `duration`（MM:SS 字符串）, `play`（整数或 `'-'`）, `like`（整数或字符串）
+- `play`/`like` 可能是字符串 `'-'`，需安全转换
+
+> **关键 Pitfall**：terminal() 的 50KB stdout cap 会导致大 JSON 被截断。**必须用 `-o /tmp/file.json` 写文件再读**，不要直接解析 terminal stdout。详见 `<references/bilibili-ai-trending-pitfalls-2026-06-16.md>`
+
+### 排行榜 API — **主力数据源**
 
 ```bash
 GET https://api.bilibili.com/x/web-interface/ranking/v2?type=all
@@ -38,6 +49,16 @@ GET https://api.bilibili.com/x/web-interface/ranking/v2?type=all
 - 返回 `data.list`，100条，按综合得分排序
 - **按 AI 关键词过滤**后取 TOP 15 长视频 + TOP 7 小视频
 - `owner.name` / `owner.uname` 可能同时为空，需批量调用 `/x/web-interface/view?bvid=xxx` 补全
+
+### popular API — **可靠补充数据源（2026-06-16 确认）**
+
+```bash
+GET https://api.bilibili.com/x/web-interface/popular?ps=50&pn=1
+```
+- 返回 `data.list[]`，字段结构与 ranking API 相同（`title/bvid/owner.name/stat.view/stat.like/duration`）
+- pn=1~5 各 50 条，共 250 条，与 ranking 合并去重后约 285 条
+- **缺点**：全站热门，AI 内容占比低（~5%），不如 search API 精准
+- **优点**：稳定不限流，作为 search API 被限流时的 fallback
 
 ## AI 关键词列表（过滤用，2026-06-10 实测更新）
 
@@ -177,6 +198,8 @@ for kw in ai_keywords:
 - `execute_code` 比 `terminal` 更适合运行多行 Python 脚本（无 shell 转义问题）
 - 标题中的 `<em class="keyword">` 和 `</em>` HTML 标签需要替换
 - **必须应用 `is_ai_title` 黑名单二次过滤**，避免 K-pop "GPT"、健身教程、芯片评测等假阳性
+- **HTML 实体解码**：标题中可能含 `&quot;` 等 HTML 实体，需 `html.unescape()` 解码后再做 XML 转义，否则产生 `&amp;quot;` 双重编码
+- **play/like 类型不一致**：search/type API 的 `play`/`like` 可能是整数或字符串 `'-'`，需安全转换
 
 ### 方法2：排行榜 API（备选）
 

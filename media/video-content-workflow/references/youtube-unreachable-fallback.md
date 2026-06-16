@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选）
 
 ## ⚠️ Cron job prompt 中的"格式规范"是错误的（2026-06-14 早间档再次确认）
 
@@ -115,14 +115,14 @@ def fetch_bv(bv):
 确认 YouTube HTTP 000 后：
 
 1. **检测 + 跳过 YouTube 浏览器**（`curl` 一下确认，不要 60s 反复试浏览器）
-2. **curl Bing 视频搜索**（1-2 个 query，覆盖长视频 + 短视频）→ grep aria-label → 提取 BVID
-3. **curl B站搜索 `AI早报`**（按 `pubdate` 排序）→ grep BVID
-4. **对所有 BVID 批量调 `/x/web-interface/view` API**（Bing + B站 30-60 条，串行 ~0.3s sleep）
+2. **curl Bing 视频搜索**（1-2 个 query）→ `grep -oE '/video/BV[A-Za-z0-9]{10}'` 提取 BVID（**不依赖 aria-label 语言**）
+3. **Bilibili search API**（`urllib.parse.quote` 编码关键词）→ 获取更多 BVID
+4. **对所有 BVID 批量调 `/x/web-interface/view` API**（Bing + B站 30-90 条，串行 ~0.3s sleep）→ 拿标题/播放量/时长/UP主/上传时间
 5. **Python 内 classify + sort**：按 `duration` 切长短（阈值 180s），按 `view` 排热度，按 `pubdate` 排新发
 6. **写 XML**（DocxXML 模板，**忽略 prompt 里的 `<YouTubeTrending>` 误导**）
 7. **lark-cli 上传**（`+update --command overwrite --doc-format xml`），期望 `ok: true` + 2 个 `degrade_code=4007` warnings（无害）
 
-**总耗时**：~2-3 分钟（vs 浏览器路径 30+ 分钟且只拿 1 条）
+**总耗时**：~2-3 分钟
 
 ---
 
@@ -218,12 +218,44 @@ https://www.bing.com/videos/search?q=AI+大模型+热门+2026
 - **跨平台补量**：Bing 凑长视频，Bilibili 凑当日新发（最稳）
 - **不要**靠点"展开"按钮扩量
 
-### 数据提取方式（2026-06-11 实测修正：aria-label 路径最优）
+### 数据提取方式（2026-06-16 更新：BVID 直取为首选）
 
-✅ **2026-06-11 实测**：`browser_console` 走 `aria-label` 路径完全可用且最稳定。每条视频卡片是一个带 `aria-label` 的 `<a>`，标签文本用 `·` 分隔，结构固定：
+⚠️ **aria-label 格式随网络出口语言变化**（2026-06-16 晚间档实测）：
+
+- **中文出口**（2026-06-14）：`aria-label="标题...来源: bilibili · 时长: ... · 已浏览 ... 次 · 上传时间: ... · 上传人: ... · 单击以播放。"` → `aria-label*="来源"` 可匹配
+- **英文出口**（2026-06-16）：`aria-label="7 Best ChatGPT Alternatives to Try in 2026 from eweek.com · uploaded on 1 month ago · Click to play."` → **`aria-label*="来源"` 匹配 0 条**
+
+**首选方案 — BVID 直取 + B站 /view API**（不依赖 aria-label 语言）：
+
+```python
+import re, urllib.request, json
+
+html = open('/tmp/bing1.html').read()
+bvs = list(set(re.findall(r'/video/(BV[A-Za-z0-9]{10})', html)))
+
+for bv in bvs:
+    req = urllib.request.Request(
+        f"https://api.bilibili.com/x/web-interface/view?bvid={bv}",
+        headers={
+            'User-Agent': 'Mozilla/5.0 ...',
+            'Referer': 'https://www.bilibili.com/',
+            'Accept-Encoding': 'identity',
+        })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        d = json.loads(r.read())['data']
+    # d['title'], d['owner']['name'], d['stat']['view'], d['duration'], d['pubdate']
+```
+
+**为什么 BVID 直取比 aria-label 更稳**：
+- BVID 链接（`/video/BVxxx`）格式固定，不随语言/地区变化
+- B站 `/view` API 返回权威数据（精确播放量、真实标题），比 Bing aria-label 估算值更准
+- 2026-06-16 实测：两个 Bing query 拿到 34 个唯一 BVID，全部 /view API 成功
+- **XML 链接直接用 B站 URL**：`https://www.bilibili.com/video/{bv}/`
+
+**降级方案 — aria-label 路径**（仅中文出口有效）：
 
 ```javascript
-// 抓所有视频卡片（约 20-30 条 / 页）
+// 仅当确认 Bing 返回中文 aria-label（含"来源"）时使用
 Array.from(document.querySelectorAll('a[aria-label*="来源"]')).slice(0, 30).map(a => {
   const parts = a.getAttribute('aria-label').split('·').map(s => s.trim());
   return {
@@ -236,11 +268,6 @@ Array.from(document.querySelectorAll('a[aria-label*="来源"]')).slice(0, 30).ma
   };
 }).filter(v => v.title);
 ```
-
-**关键发现**：
-- `a.textContent` 仍可能为空（Bing 用 Shadow DOM / 虚拟列表），**但 `aria-label` 是真实的**——无障碍标签不会被覆盖。
-- `a.href` 是 `https://www.bing.com/videos/riverview/relatedvideo?q=...`（Bing 相关视频查看器），**无法跳到 YouTube 原页**。
-- **XML 链接用 Bing search URL 替代**：`https://www.bing.com/videos/search?q={urlquote(title)}`（与 2026-06-10 早间档格式一致），用户点击后在 Bing 搜到原视频。
 
 ### 数据提取方式（snapshot 路径，已被 aria-label 取代，保留作降级）
 
@@ -377,6 +404,16 @@ https://search.bilibili.com/all?keyword=AI+2026-06-01&search_type=video&order=pu
 > ```
 
 > **2026-06-13 实测：`browser_console` 上重 JS 链超时（30s）陷阱**。复杂的 `JSON.stringify(Array.from(document.querySelectorAll('a[aria-label*="来源"]')).filter(...).slice(0,25).map(a => { ... return {...} }), null, 2)` 链（DOM 过滤 + 切片 + map + JSON 序列化）经常会超时返回 `Command timed out after 30 seconds`。但简单的 `Array.from(...).map(...).slice(0, N).join('\n---\n')` 不超时（只提取 aria-label 字符串拼起来）。**经验法则**：console expression 避免 4 层以上链式调用 + 大对象序列化，单行控制在 200 字符内。
+
+### ⚠️ Bilibili search API 必须 URL 编码（2026-06-16 晚间档实测）
+
+`/x/web-interface/search/type?keyword=` 参数含中文或空格时必须 URL 编码，否则 Python `urllib.request` 报错 `'ascii' codec can't encode characters` 或 `URL can't contain control characters`。
+
+```python
+import urllib.parse
+encoded_q = urllib.parse.quote("AI早报 ChatGPT Claude")
+url = f"https://api.bilibili.com/x/web-interface/search/type?keyword={encoded_q}&search_type=video&order=pubdate&page=1"
+```
 
 ### 高价值频道（AI 早报系列）
 

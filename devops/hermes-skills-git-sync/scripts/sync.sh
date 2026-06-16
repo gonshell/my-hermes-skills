@@ -12,8 +12,9 @@ SRC=/Users/xiesg/.hermes/skills
 
 cd "$REPO" || { echo "FATAL: repo not found at $REPO" >&2; exit 1; }
 
-# 1. Pull latest
-git pull --ff-only origin main
+# 1. Pull latest (timeout: git data-transfer hangs in cron sandbox even when SSH auth works)
+#    For one-way sync (local→remote), skipping pull is acceptable — we only push.
+timeout 15 git pull --ff-only origin main 2>/dev/null || echo "WARN: git pull skipped (timeout or no remote changes)"
 
 # 2. Mirror (rsync --delete so DST ends up identical to SRC)
 # -L: follow symlinks and copy real file content (not broken symlinks in repo)
