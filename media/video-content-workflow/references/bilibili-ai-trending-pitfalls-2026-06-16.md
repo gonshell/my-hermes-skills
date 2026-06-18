@@ -64,7 +64,7 @@ with open('/tmp/bili_result.json', 'r') as f:
 
 `/x/web-interface/popular?ps=50&pn=N` 返回**标准化热门视频**（非搜索结果），字段结构与 ranking API 相同（`data.list[].title/bvid/owner.name/stat.view/stat.like/duration`）。
 
-**实测**：pn=1~5 各返回 50 条，共 250 条。与 ranking API 的 100 条合并去重后约 285 条唯一视频。
+**实测**：pn=1~10 各返回 50 条，共 500 条（2026-06-17 确认 pn=6~10 也正常返回）。与 ranking API 合并去重后可获 500+ 条唯一视频。
 
 **使用场景**：
 - 当 search API 被限流时，popular + ranking 提供稳定的基础数据池
@@ -113,7 +113,37 @@ if isinstance(like, str):
 
 > ⚠️ 但最终应以 cron job prompt 中的定义为准（prompt 说"小视频"就用 prompt 的阈值）。
 
-## 7. 本次 session 数据获取流程（供参考）
+## 8. Ranking API 按分区查询（2026-06-17 实测）
+
+`/x/web-interface/ranking/v2?rid={rid}&type=all` 按分区获取排行榜：
+
+| rid | 分区 | 结果 |
+|-----|------|------|
+| 36 | 知识 (Knowledge) | ✅ page 1 返回 96 条，page 2+ 返回 -352 |
+| 188 | 科技 (Technology) | ❌ -352 |
+| 95 | 科技·AI | ❌ -352 |
+| 201/230/231/232/233 | 其他科技子分区 | ❌ -352 或 -400 |
+
+**结论**：只有 rid=36（知识）可用，且仅 page 1。其他科技/AI 分区全部被 -352 封禁。**不要浪费请求尝试多个 rid**。
+
+## 9. Search API 速率限制更严格（2026-06-17 实测）
+
+在单次 session 中连续请求 25 个关键词（带 cookie + 正确 headers），**仅 4 个返回结果**（大模型 20 条、神经网络 20 条、ChatGPT 20 条、Claude 20 条），其余全部返回空响应体或 HTTP 412。
+
+**与 2026-06-16 的差异**：之前认为"大部分关键词返回正常 JSON"，但 2026-06-17 实测显示**成功率约 16%**（4/25）。可能与 session 频率、IP 信誉有关。
+
+**实践建议**：search API 不应作为唯一数据源。popular API（500 条）+ ranking API（96 条）+ search API（~80 条）三源合并是当前最稳方案。
+
+## 10. execute_code 中 terminal() 的 json_parse 使用
+
+execute_code 环境中 `json_parse` 是 hermes_tools 内置函数（无需 import），可直接使用：
+```python
+from hermes_tools import terminal
+resp = terminal('curl -s ...')
+data = json_parse(resp['output'])  # 自动处理控制字符
+```
+
+**但注意**：当 JSON 超过 50KB 时，terminal() 的 stdout 截断会导致 json_parse 也失败。此时必须用 `-o /tmp/file.json` 写文件再读。
 
 1. ranking API → 100 条
 2. popular API p1-p5 → 250 条

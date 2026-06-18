@@ -28,7 +28,7 @@ metadata:
 - ⚠️ **YouTube "AI" 关键词歧义**（2026-06-16 实测）：搜索 "AI news" 会返回大量 **Air India (AI)** 航空新闻（如 "Air India Plane Crash"、"AI-171 Crash"），与人工智能无关。**必须使用 "artificial intelligence" 或 "ChatGPT Claude GPT LLM Gemini" 等无歧义关键词**，避免 "AI news"、"AI update" 等短查询。
 - **并行搜索策略**（2026-06-16 实测高效）：使用 `delegate_task` 派出 3 个并行子 agent，分别搜索不同关键词组合（如 "AI ChatGPT Claude GPT LLM"、"artificial intelligence machine learning 2026"、"AI tools agent news"），各自用 `sp=CAMSBAgEEAE%3D` 过滤本周上传，合并去重后按播放量排序。比单 agent 串行搜索快 3-5 倍。
 
-详见 `<references/youtube-ai-trending.md>`
+详见 `<references/youtube-ai-trending.md>` + `<references/youtube-ai-trending-filters.md>`（sp 参数速查 + JS 提取代码 + 降级策略）
 
 ### YouTube 内容热度监控 → `youtube-ai-trending-monitor`
 
@@ -303,8 +303,6 @@ cd /Users/xiesg && lark-cli docs +update --api-version v2 \
 
 早间档文档 token：`EbHDdKARYo4vEExQiNGc3qiGnSe`
 晚间档文档 token：`HhyMdusqdoVcW9xLyd2c2Yc2nnf`
-晚间档文档 token：`HhyMdusqdoVcW9xLyd2c2Yc2nnf`
-早间档文档 token：`EbHDdKARYo4vEExQiNGc3qiGnSe`
 ### cronjob 路径偏移
 `os.path.expanduser("~/.hermes/cron/output/")` 在 cronjob 中展开为错误路径。**必须硬编码绝对路径**：
 ```python
@@ -336,10 +334,10 @@ lark-cli drive files patch \
 
 | 用户请求 | 技能 |
 |---|---|
-| 获取今日热门AI视频 | `youtube-ai-trending` |
-| 获取B站今日热门视频 | `bilibili-ai-trending` 或 `bilibili-trending` |
+| 获取今日热门AI视频 | **本 skill**（`video-content-workflow`） |
+| 获取B站今日热门视频 | **本 skill**（含 `bilibili-ai-trending` / `bilibili-trending` 子流程） |
 | 从视频提取字幕/摘要 | `youtube-content` |
-| 监控YouTube内容热度 | `youtube-ai-trending-monitor` |
-| 写入飞书文档（视频内容） | 本 skill + 对应平台子 skill |
+| 监控YouTube内容热度 | **本 skill**（含 `youtube-ai-trending-monitor` 子流程） |
+| 写入飞书文档（视频内容） | 本 skill + `lark-doc` |
 
 > 详细文档结构规范（含方案A/B对比、XML模板、碰撞处理）见 `<references/feishu-doc-structure.md>`

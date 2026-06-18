@@ -50,15 +50,19 @@ GET https://api.bilibili.com/x/web-interface/ranking/v2?type=all
 - **按 AI 关键词过滤**后取 TOP 15 长视频 + TOP 7 小视频
 - `owner.name` / `owner.uname` 可能同时为空，需批量调用 `/x/web-interface/view?bvid=xxx` 补全
 
-### popular API — **可靠补充数据源（2026-06-16 确认）**
+### popular API — **可靠补充数据源（2026-06-17 更新）**
 
 ```bash
 GET https://api.bilibili.com/x/web-interface/popular?ps=50&pn=1
 ```
 - 返回 `data.list[]`，字段结构与 ranking API 相同（`title/bvid/owner.name/stat.view/stat.like/duration`）
-- pn=1~5 各 50 条，共 250 条，与 ranking 合并去重后约 285 条
+- **pn=1~10 各 50 条，共 500 条**（2026-06-17 确认 pn=6~10 正常返回，不受限流）
+- 与 ranking + search 合并去重后可得 500+ 条唯一视频
 - **缺点**：全站热门，AI 内容占比低（~5%），不如 search API 精准
 - **优点**：稳定不限流，作为 search API 被限流时的 fallback
+- **JSON 控制字符问题**：popular API 返回的 JSON 含控制字符，`json.loads()` 会失败。用 hermes_tools 内置的 `json_parse(resp['output'])` 处理，或写文件再读
+- **优点**：稳定不限流，作为 search API 被限流时的 fallback
+- **JSON 控制字符问题**：popular API 返回的 JSON 含控制字符，`json.loads()` 会失败。用 hermes_tools 内置的 `json_parse(resp['output'])` 处理，或写文件再读
 
 ## AI 关键词列表（过滤用，2026-06-10 实测更新）
 
