@@ -1,7 +1,7 @@
 ---
 name: tech-blog
-version: 1.0.0
-description: 技术博客多智能体协作创作流水线 — 8阶段编排入口，协调6个独立Skill完成从原始材料到发布文章的全流程
+version: 1.1.0
+description: 技术博客多智能体协作创作流水线 — 8阶段编排入口，协调6个子技能完成从原始材料到发布文章的全流程
 category: tech-blog
 triggers:
   - 写技术博客
@@ -9,33 +9,50 @@ triggers:
   - 博客流水线
   - 内容创作编排
   - tech blog pipeline
-related_skills:
-  - narrative-theme-generator
-  - review-checklist-generator
-  - reader-persona-feedback
-  - writing-style-extractor
-  - chapter-consistency-checker
-  - feishu-blog-publisher
 ---
 
 # 技术博客创作流水线（编排Skill）
 
 ## 概述
 
-本Skill是**编排器**，负责按正确顺序调度6个独立Skill完成技术博客创作。自身不执行具体任务，而是告诉Agent"先做什么、后做什么、用什么Skill"。
+本Skill是**编排器**，负责按正确顺序调度6个子技能完成技术博客创作。自身不执行具体任务，而是告诉Agent"先做什么、后做什么、用什么子技能"。
 
-### 系统组成
+### 子技能位置
+
+6 个子技能现已合并为本 skill 的 references/subskills/ 子目录（早期它们是独立 skill，2026-06 整合）。每个子技能都是完整 SKILL.md + 自己的 references/ 目录：
 
 ```
-tech-blog/                           ← 📍 入口（你在这里）
-├── SKILL.md                         ← 编排器（入口Skill）
-├── narrative-theme-generator/       ← 阶段2：叙事主线设计
-├── writing-style-extractor/         ← 可选前置：风格提取
-├── review-checklist-generator/      ← 阶段5：双轨审查
-├── chapter-consistency-checker/     ← 阶段4后置：一致性检查
-├── reader-persona-feedback/         ← 阶段6：多元读者反馈
-└── feishu-blog-publisher/           ← 阶段8：格式发布
+tech-blog/                                    ← 📍 入口（你在这里）
+├── SKILL.md                                  ← 编排器（入口）
+├── references/subskills/
+│   ├── narrative-theme-generator/            ← 阶段2：叙事主线设计
+│   │   ├── SKILL.md
+│   │   └── references/ (debate-protocol, narrative-ethics)
+│   ├── writing-style-extractor/              ← 可选前置：风格提取
+│   │   └── SKILL.md + references/extraction-dimensions.md
+│   ├── chapter-consistency-checker/          ← 阶段4后置：一致性检查
+│   │   └── SKILL.md + references/(consistency-rules, prose-quality-issues)
+│   ├── review-checklist-generator/           ← 阶段5：双轨审查
+│   │   └── SKILL.md + references/checklist-templates.md
+│   ├── reader-persona-feedback/              ← 阶段6：多元读者反馈
+│   │   └── SKILL.md + references/feedback-template.md
+│   └── feishu-blog-publisher/                ← 阶段8：格式发布
+│       └── SKILL.md + references/(feishu-permissions, md-to-docx-conversion, incremental-doc-editing)
+└── references/                               ← 编排器自身参考文档
+    ├── operational-constraints.md
+    ├── execution-diagnostics.md
+    ├── research-verification-patterns.md
+    ├── youtube-source-guide.md
+    ├── author-voice-taxonomy.md
+    ├── post-write-reflection-checklist.md
+    └── latent-reasoning-fact-card.md
 ```
+
+加载某个子技能时直接 `cat references/subskills/<name>/SKILL.md` 即可。它和独立 skill 一样工作。
+
+### 早期独立 skill 列表（已合并）
+
+合并前的 6 个独立 skill 现都已归档：narrative-theme-generator / review-checklist-generator / reader-persona-feedback / writing-style-extractor / chapter-consistency-checker / feishu-blog-publisher。它们的 SKILL.md 和 references/ 现在是 `references/subskills/<name>/` 下的子文件。调度本 skill 时直接 `cat` 即可。
 
 ---
 
@@ -46,15 +63,15 @@ tech-blog/                           ← 📍 入口（你在这里）
     ↓
 [阶段1: 材料解析]          ← Agent直接执行，无专用Skill
     ↓
-[阶段2: 叙事主线设计]       ← narrative-theme-generator
+[阶段2: 叙事主线设计]       ← references/subskills/narrative-theme-generator/
     ↓ ★ 介入点A：人选择叙事线
 [阶段3: 结构规划]           ← Agent直接执行，无专用Skill
     ↓
-[阶段4: 初稿写作]           ← 多Agent并行 → chapter-consistency-checker后置检查
+[阶段4: 初稿写作]           ← 多Agent并行 → references/subskills/chapter-consistency-checker/ 后置检查
     ↓
-[阶段5: 双轨审查]           ← review-checklist-generator
+[阶段5: 双轨审查]           ← references/subskills/review-checklist-generator/
     ↓ ★ 介入点B：人仲裁争议（可选）
-[阶段6: 多元读者反馈]       ← reader-persona-feedback
+[阶段6: 多元读者反馈]       ← references/subskills/reader-persona-feedback/
     ↓
 [阶段7: 优化决策]           ← Agent直接执行，无专用Skill
     ↓ ★ 介入点C：人选择优化方案（可选）
@@ -62,17 +79,18 @@ tech-blog/                           ← 📍 入口（你在这里）
     ↓
 [阶段7.6: 写后反思自检]     ← Agent直接执行（不可跳过，5 维度自检）
     ↓
-[阶段8: 格式发布]           ← feishu-blog-publisher
+[阶段8: 格式发布]           ← references/subskills/feishu-blog-publisher/
 ```
 
 ### 可选前置步骤
 
-在阶段2之前，可用 `writing-style-extractor` 从标杆文章提取风格指南，传递给后续写作阶段。
+在阶段2之前，可用 `references/subskills/writing-style-extractor/SKILL.md` 从标杆文章提取风格指南，传递给后续写作阶段。
 
 ### 参考文档
 
 - `references/operational-constraints.md` — delegate_task超时、API限流、素材采集策略等执行约束与踩坑记录
 - `references/youtube-source-guide.md` — YouTube视频作为素材源的采集策略（含无字幕降级方案）
+- `references/research-verification-patterns.md` — **网络调研数据验证**：delegate_task返回的web search结果可能包含参数量单位混淆、代际混用、变体错误等，阶段5技术审查是必须的事实安全网（2026-06 NVIDIA GTC Taipei 博客实证）
 - `references/latent-reasoning-fact-card.md` — 写"潜在推理 / 神经元语 / Thinking Budget"类博客前必读的验证事实卡（含 Coconut / LRT / Deep Think / Thinking Machines 等论文的常见误读与正确措辞，2026-06 由 Neuralese 博客实战整理）
 - `templates/paradigm-naming-blog-outline.md` — 范式/概念命名类博客大纲模板（如 Loop Engineering、Prompt Caching 类新概念解读的章节骨架，含 10 章 + 附录的完整结构）
 - `references/post-write-reflection-checklist.md` — **写后反思自检清单**：阶段 7.5 之后、阶段 8 之前必做的作者自检，5 维度（完整性/口吻/真实性/逻辑/可落地性）+ 必修/建议/可选三档优先级。**专门覆盖 5 角色反馈抓不到的问题**（未核实数字、不可证伪断言、时效声明缺失）
@@ -93,7 +111,7 @@ tech-blog/                           ← 📍 入口（你在这里）
 
 ### 阶段2：叙事主线设计
 
-**操作**：加载 `narrative-theme-generator`
+**操作**：加载 `references/subskills/narrative-theme-generator/SKILL.md`
 - 输入：阶段1的结构化输出
 - 输出：3个叙事线候选 + 置信度
 - **介入点A**：将Top3候选呈现给用户，请用户选择
@@ -109,7 +127,7 @@ tech-blog/                           ← 📍 入口（你在这里）
 - **统一为名词短语**：`模型的母语` / `Neuralese 的由来` / `显微镜下的概念空间` / `三条技术路径` / `思考的定价` / `四个未解问题` / `三类读者的判断` / `不是终局`
 - **每个标题自身能传达章节核心信息**——不需要上下文读者就知道这章讲什么
 - **所有标题单独读就是一条完整论证线**——从"是什么"推进到"怎么办"再收口
-- **长度均匀**（4-7 字），视觉节奏一致
+- **长度均匀**（4-7 字），视觉节奏一致——但要避免"为了凑长度"硬改章节名（如把"后记"改成"一年后的图景"）。如章节天然是 2 字短标题（如"引子""结语"），允许保留，但需保证全篇 ≤2 处长短标题间隔出现，不形成节奏断裂。
 - **统一是逻辑统一不是格式统一**——不要靠加冒号/编号/前缀来制造一致性，要靠内容自身的逻辑递进
 - 详见 `references/author-voice-taxonomy.md` §标题设计
 
@@ -128,10 +146,10 @@ tech-blog/                           ← 📍 入口（你在这里）
 - 用 `write_file` 一气呵成写完全文（不要分批）
 - 用 `patch` 做后续修改（不要重写全文）
 
-**阶段4后置一致性检查**：写完后用 `chapter-consistency-checker` 做后置一致性检查
+**阶段4后置一致性检查**：写完后用 `references/subskills/chapter-consistency-checker/SKILL.md` 做后置一致性检查
    - 6个标准维度：术语/语气/细节层次/人称/引用格式/读者视角完整性
    - **第6维度（读者视角完整性）**：扫描过程性内容残留（元叙事、自我指令、术语速查、章末小结等）——这些是阶段4-7审查流水线的副产品，不删会导致"不能直接给读者看"
-   - **额外补充**：段落级阅读体验检查（孤立短段、AI味总结句、突兀收尾句）——详见 `chapter-consistency-checker/references/prose-quality-issues.md`
+   - **额外补充**：段落级阅读体验检查（孤立短段、AI味总结句、突兀收尾句）——详见 `references/subskills/chapter-consistency-checker/references/prose-quality-issues.md`
    - ⚠️ **根据一致性检查报告修改初稿中的不一致项，再进入阶段5**
 
 5. **阶段4前置禁止词汇检查**：动笔前通读素材/大纲，确认不包含以下贬低性词汇：
@@ -141,20 +159,30 @@ tech-blog/                           ← 📍 入口（你在这里）
 
 **执行约束**：
 - ⚠️ `delegate_task` 有600秒超时上限。长文写作不要用delegate（见上方"主session写作"）
-- ⚠️ **reader-persona-feedback 5角色并行**：max_concurrent_children=3，需分2批（第1批3角色，第2批2角色）
+- ⚠️ **reader-persona-feedback 5角色并行**：`max_concurrent_children=3`，需分2批（第1批3角色，第2批2角色）
 - ⚠️ 子任务context中传文件路径，不要内嵌全文
 
 ### 阶段5：双轨审查
 
-**操作**：加载 `review-checklist-generator`
+**操作**：加载 `references/subskills/review-checklist-generator/SKILL.md`
 - 技术审查轨道（熔炉型）：收敛到已验证/待验证/存疑
 - 编辑审查轨道（放大器型）：穷举问题保留分歧
 - **介入点B**：若存在未解决争议，呈现给用户仲裁
 - ⚠️ **审查完成后必须根据清单修改文章，再进入阶段6**
 
+**单源访谈/转录类博客的熔炉型轨道追加项（2026-06 实证）**：当素材是单一发言者转录（访谈/演讲/Podcast），且主 session 已按 `references/subskills/narrative-theme-generator/SKILL.md` 例外条款4跳过 3 轮辩论时，**必须在技术审查轨道中追加"逐字引用核查"步骤**：
+
+1. 用 `re.findall(r'"([^"]+)"', article_text)` 抽出文章中所有引号内容
+2. 人工挑选 5-10 条关键引语（含核心论点 + 含完整英文长句的引用）
+3. 对每条引语在原稿中 `re.find` 比对，确认逐字一致（包括大小写、标点、`...` 省略位置）
+4. 不一致的引语降级为意译（删除引号、改写），或在文章中标注 "[原文为意译]"
+5. 把核查脚本输出写入审查报告，作为"事实层已通过"的证据
+
+**为什么必须做**：单源转录的"事实错误"最常出现在"我以为我引的是原话但其实改了几个词"——`re.findall` + 5-10 条抽样的 70 秒脚本能拦下 90% 的此类问题。视觉上"看起来像引用"不等于"逐字引用"，读者的信任建立在字面一致上。
+
 ### 阶段6：多元读者反馈
 
-**操作**：加载 `reader-persona-feedback`
+**操作**：加载 `references/subskills/reader-persona-feedback/SKILL.md`
 - 5角色并行独立反馈（防平均化）
 - 输出5份独立反馈报告
 - ⚠️ `max_concurrent_children=3`，需分2批执行：第1批（资深工程师+普通读者+技术写作者），第2批（开源社区成员+商业决策者）
@@ -214,7 +242,7 @@ tech-blog/                           ← 📍 入口（你在这里）
 
 ### 阶段8：格式发布
 
-**操作**：加载 `feishu-blog-publisher`
+**操作**：加载 `references/subskills/feishu-blog-publisher/SKILL.md`
 - Markdown → 飞书XML富格式
 - 自动图表意图识别（Mermaid/Table/Callout/Grid/HR）
 - 创建飞书文档并返回链接
@@ -273,8 +301,8 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
 
 | 模式 | 适用阶段 | 目标 | 使用Skill |
 |------|---------|------|----------|
-| 放大器型 | 阶段2叙事主线、阶段5编辑审查、阶段7优化决策 | 穷举候选，保留分歧 | narrative-theme-generator, review-checklist-generator |
-| 熔炉型 | 阶段5技术审查 | 收敛到唯一结论 | review-checklist-generator |
+| 放大器型 | 阶段2叙事主线、阶段5编辑审查、阶段7优化决策 | 穷举候选，保留分歧 | references/subskills/narrative-theme-generator/, references/subskills/review-checklist-generator/ |
+| 熔炉型 | 阶段5技术审查 | 收敛到唯一结论 | references/subskills/review-checklist-generator/ |
 
 ---
 
@@ -323,14 +351,14 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
 
 1. **跳过介入点A直接写作** → 叙事线未确认导致返工
 2. **阶段6读者反馈在阶段5之前运行** → 反馈基于未审查的文章，浪费时间
-3. **chapter-consistency-checker在阶段3运行** → 还没有初稿，无从检查
+3. **chapter-consistency-checker 在阶段3运行** → 还没有初稿，无从检查
 4. **把pipeline当成单一Skill调用** → 它是编排器，需要按阶段逐个调度子Skill
 5. **阶段5审查后未修改文章直接进入阶段6** → 读者反馈基于未修复的文章，浪费反馈轮次
 6. **用delegate_task写长文（≥5000字）** → 几乎必然超时或限流，应主session直接执行
 7. **主 Agent 未亲手读原始材料**（用户纠正过）：写技术教程/速查手册/参考指南时，**主 Agent 必须自己读官方文档**，不能靠 delegate_task 间接抓取后总结。详见 `references/operational-constraints.md` §5。
 
 8. **收到优先级列表时只修复指定级别**：用户说"只修复P0、P1" → 直接执行P0+P1，不解释其他级别、不列出完成项、不多问确认。执行结果简洁回报（改了几处、涉及哪些章节），不再重复清单。
-7. **阶段6并行数限制**：5角色并行需分2批执行（`max_concurrent_children=3`），第一批3个角色（如资深工程师+普通读者+技术写作者），第二批2个角色（如开源社区+商业决策者）。详见 `reader-persona-feedback` SKILL.md。
+7. **阶段6并行数限制**：5角色并行需分2批执行（`max_concurrent_children=3`），第一批3个角色（如资深工程师+普通读者+技术写作者），第二批2个角色（如开源社区+商业决策者）。详见 `references/subskills/reader-persona-feedback/SKILL.md`。
 
 8. **阶段7优化后必须修改文章**：优化计划确认后修改文章，再进入阶段8。发布未优化版本浪费前面所有阶段工作。
 
@@ -348,7 +376,7 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
     - `--new-title` flag 在当前版本**不存在**（旧 SKILL 文档误传）
     - `--title` + `--content @file` **互斥**
     - 唯一稳定可用：`--doc-format markdown --content @./file.md`（首行 `# 标题` 提取）
-    - 详见阶段 8 速查表与 `feishu-blog-publisher` SKILL.md。
+    - 详见阶段 8 速查表与 `references/subskills/feishu-blog-publisher/SKILL.md`。
 
 13. **Mermaid 图无法在飞书原生画板渲染**：Mermaid 块会被解析为 `<whiteboard type="mermaid">` 但**渲染失败**（warning 2107）。如果博客含 Mermaid，必须**额外用 mermaid.live 导出 PNG 手动插入**。本会话两个 Mermaid 图（范式层级图 + Loop 时序图）均未在飞书渲染。
 
@@ -356,9 +384,11 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
     - 永远不要省略 5 角色反馈中的资深工程师角色——它是技术类博客的"事实安全网"
     - 在子任务 context 中**显式提供证据源链接**（论文标题 + 团队 + 时间），让 sub-agent 能交叉验证
     - 资深工程师给出的 5 项 P0 中，**至少 3-4 项是事实错误，不是风格偏好**——必须硬修，不能用"风格差异"搪塞
-    - 详见 `reader-persona-feedback` SKILL.md 中"资深工程师"角色定义
+    - 详见 `references/subskills/reader-persona-feedback/SKILL.md` 中"资深工程师"角色定义
 
 15. **新事实密集型技术话题的写作模式**（2026-06 Neuralese 博客实证）：对"我了解概念但不确定论文细节"的话题，阶段 1 素材采集时应**优先列 8-10 个一手来源清单**（论文 + 团队 + 链接 + 时间），让主 Agent 自己对齐事实，**而不是仅靠 1-2 篇二手报道**。本会话阶段 1 收集了 9 份来源（Anthropic × 3, Meta, Goyal, 哈工深 LRT, Thinking Machines, King's College, Gemini Deep Think），是资深工程师能在 70 秒内揭出 5 个事实错误的**前提条件**。如发现阶段 1 素材不足 5 个一手来源，**停下来补齐再进入阶段 2**。
+
+16. **delegate_task 调研返回的数据不等于事实**（2026-06 NVIDIA GTC Taipei 博客实证）：web search 子代理返回的技术规格可能包含参数量单位混淆（320亿→320B）、代际混用（上代Grace 72核混入Vera CPU）、变体参数错误（Cosmos 3 Super 32B实际64B）。**阶段5技术审查必须逐条验证关键数字**，不能假设"多个来源一致=正确"（可能是同一错误源的传播）。详见 `references/research-verification-patterns.md`。
 
 16. **阶段 4-7 的审查流水线只做加法不做减法**（2026-06 Neuralese 博客实证，P0 级发现）：一致性检查、双轨审查、5 角色反馈、优化修补——每一轮都在往文章里**加**内容（加表格、加清单、加术语说明、加行动列表）。但**从头到尾没有人从读者视角做整体剪裁**。用户在初稿通过全部审查后指出："还是不能直接给读者看，内容有点乱入，如一些整理、过程性的内容都在里面"。**根因**：阶段 4-7 的审查角色（checker / reviewer / reader personas）各自只关心自己的维度，没有一个人负责"这份文章从读者第一段读到末段，有没有不必要的作者内心独白"。**解法**：阶段 7.5（读者视角剪裁）是发布前**不可跳过**的步骤，详见上方阶段 7.5 描述。
 
@@ -385,6 +415,33 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
     - 反方观点的密度足够即可，**不要为了"看起来全面"再加第 6、第 7 个反方维度**
     - 详见 `references/post-write-reflection-checklist.md` "三档优先级清单"和"用户对优化范围的选择偏好"
 
+22. **单源访谈转录类博客的"逐字引用核查"不可省**（2026-06 Claude Code 周年博客实证）：单源转录类博客（访谈/演讲/Podcast）的最大事实风险不是观点争议，而是"我以为我引的是原话但其实改了几个词"——视觉上"看起来像引用"但字面不一致，读者一旦对照原文发现，信任全部崩塌。**解法**：阶段5熔炉型轨道必须包含 `re.findall` 抽取引号内容 + 与原稿逐字对比的脚本，5-10 条关键引语抽样即可拦下 90% 的此类问题。详细见阶段5补充说明。
+
+23. **标题长度一致性检查的盲区**（2026-06 实证）：阶段3的"标题命名原则"列了"4-7 字长度均匀"——但实操中常出现"2 字短标题"（如"后记""引子"）单独破坏节奏。本轮 Claude Code 周年博客的"后记"标题（仅 2 字）就是被自动检查器捕获并被改写为"一年后的图景"（5 字）。**解法**：阶段3出大纲后，用 `len(name.replace(" ", ""))` 对所有 H2 标题跑一次长度分布，标记长度偏离均值 ±3 字的标题，要么改写、要么保留（但全篇 ≤2 处的硬性限制）。
+    - 优化范围选项**不要给"全做/不做/只改 P0"等开放组合**，要**预定义 3 个套餐**（"只 P0 / P0+P1 / 全部"）+ 各自时间与影响说明
+    - 修改过程中**不要为"完整性"加额外章节**——用户偏好"最小改动"而非"覆盖全面"
+    - 反方观点的密度足够即可，**不要为了"看起来全面"再加第 6、第 7 个反方维度**
+    - 详见 `references/post-write-reflection-checklist.md` "三档优先级清单"和"用户对优化范围的选择偏好"
+
+24. **厂商发布会综合报道的"快速通道"与输入形态识别**（2026-06-19 NVIDIA GTC Taipei keynote 博客实证）：当用户输入是 **YouTube 视频链接（厂商 keynote 完整回放）+ 厂商官方活动页面**时，不需要走完整 pipeline。这是一种**新型输入形态**，与"单源访谈/转录类"（陷阱 22）和"概念命名类"（陷阱 21）都不同：
+
+    - **素材特性**：视频本身只是"事件锚点 + 章节结构"，**实质内容都在厂商 Newsroom / Blog / 产品页里**
+    - **工具链不同**：不走 `fetch_transcript.py`（多半 IP 阻断）、不走 `browser_navigate`（视频描述里没有内容），直接用 `mcp_websearch_searxng_searxng_web_search` + `mcp_websearch_searxng_web_url_read` 抓官方一手页
+    - **可跳过的阶段**：阶段 2（叙事线生成不需要，结构是产品线维度）、阶段 6（多角色反馈不需要，用户要的是"详实真实可信"而非"读者体验"）、阶段 7.5（过程性内容少，本来就是产品列表式）
+    - **不能跳过的**：阶段 1（章节 + 主题列表）、阶段 4（主 session 一气呵成写）、阶段 5（数字审查是**最重要**的安全网——产品发布会数字错误代价高）
+    - **文档结构**：基础设施 → 硬件 → 软件 → 端侧 → 物理 AI → 智能体 → 现场非技术信号 → 判断与启示（按用户洞见 v2 模板）→ 数字一览表 → 参考资料
+    - **详细工作流**：见 `references/youtube-source-guide.md` "层级 0.5"段和 `references/research-verification-patterns.md` "2026-06-19 实证"段
+
+25. **Hermes 默认 web 工具不可用时的 MCP 替代**（2026-06-19 验证）：Hermes 的 `web_search` / `web_extract` 走 Firecrawl，未配置时返回 "Web tools are not configured"。**替代入口**：
+    - `mcp_minimax_web_search` — 主搜索引擎，返回带 relevance_score
+    - `mcp_websearch_searxng_searxng_web_search` — SearXNG 元搜索，可指定 num_results / time_range / categories
+    - `mcp_websearch_searxng_web_url_read` — 单页 markdown 提取，maxLength 可调
+    - **不要**继续尝试 `terminal curl YouTube`（30s 超时几乎一定失败）
+    - **不要**尝试 `browser_navigate` 抓 YouTube（描述里只有章节没有内容，且 YouTube 检测机器人）
+    - 详见 `references/youtube-source-guide.md` "层级 0.5"段的工具链选择表
+
+26. **厂商发布会数字必须"先官方后二手"验证**（2026-06-19 NVIDIA GTC Taipei 实证）：与陷阱 16（delegate 调研错误）相比，本轮验证了**正确流程**：先读厂商 Newsroom 新闻稿（参数最准）→ 再读官方 Blog（功能 + 生态）→ 最后读产品页（规格）→ 数字不一致时**以 Newsroom 为准**。本轮 12 个关键数字（Vera CPU 88核 / Rubin 50 PFLOPS / RTX Spark 1 PFLOPS 等）全部通过此流程零错误验证。**注意**：第一次（2026-06 同期）的同一主题博客就有 Vera 核心数 72 vs 88、代际混淆（Grace 规格混入 Vera）等问题——证明这个验证流程不是装饰，是**必要的安全网**。
+
 ---
 
 ## 快速启动
@@ -393,15 +450,15 @@ lark-cli docs +fetch --api-version v2 --doc <doc_id> --scope outline
 用户说"帮我写一篇关于XX的技术博客"
 
 1. 读取原始材料 → 阶段1自行解析
-2. 加载 narrative-theme-generator → 阶段2生成叙事线 → 请用户选择
+2. 加载 references/subskills/narrative-theme-generator/SKILL.md → 阶段2生成叙事线 → 请用户选择
 3. 阶段3自行规划大纲
-4. 阶段4并行写作 → chapter-consistency-checker检查
-5. 加载 review-checklist-generator → 阶段5双轨审查 → ⚠️ 根据审查结果修改文章
-6. 加载 reader-persona-feedback → 阶段6读者反馈
+4. 阶段4并行写作 → references/subskills/chapter-consistency-checker/SKILL.md 检查
+5. 加载 references/subskills/review-checklist-generator/SKILL.md → 阶段5双轨审查 → ⚠️ 根据审查结果修改文章
+6. 加载 references/subskills/reader-persona-feedback/SKILL.md → 阶段6读者反馈
 7. 阶段7自行汇总优化 → 请用户确认
 8. 阶段7.5读者视角剪裁 → 删除过程性内容（不可跳过）
 9. 阶段7.6写后反思自检 → 5 维度自检（不可跳过，详见 references/post-write-reflection-checklist.md）
-10. 加载 feishu-blog-publisher → 阶段8发布到飞书
+10. 加载 references/subskills/feishu-blog-publisher/SKILL.md → 阶段8发布到飞书
 ```
 
 > 📋 执行策略详见「执行策略」章节，delegate超时诊断详见 `references/execution-diagnostics.md`

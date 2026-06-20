@@ -750,6 +750,7 @@ lark-cli docs +update --api-version v2 --doc <token> \
 
 | 资源 | 用途 |
 |------|-----|
+| `recipes/ai-video-multidoc-report/SKILL.md` | **新增** 5 doc 视频综合分析专用 recipe（3 视频 doc + 1 事件流 doc + 1 时间窗互补 B 站 doc 的固定配置，6 主题 v11 骨架 + 涌现 2 主题，详见该 SKILL.md 内的硬编码 doc token） |
 | `references/lark-docx-read.md` | 飞书 docx 读取的两条路径 + 陷阱 |
 | `references/lark-cli-markdown-write.md` | **ad-hoc 分析报告用 markdown 写入飞书**（与 cron XML 模式分离的写入路径） |
 | `references/cron-content-pipeline-pitfalls.md` | cron 写飞书的 6 大结构性陷阱 |
@@ -758,6 +759,6 @@ lark-cli docs +update --api-version v2 --doc <token> \
 | `references/report-iteration-workflow.md` | 教训 12-14 的来源上下文——工程脚手架排除 / 融合≠删除 / 全文冗余审查方法（v6→v9 迭代记录） |
 | `references/insight-writing-pitfalls.md` | 教训 19 的来源上下文——洞见写作的"标签"陷阱 / "人"层要求 / 反 AI 味 4 规则（v10→v11 迭代记录） |
 | `references/insight-template-v2.md` | **新增** 教训 21 的来源上下文——洞见模板 v2（反常断言+涌现式维度+倾向+替代假设）的 4 个改进点、完整示例、批量重构操作技巧 |
-| `references/research-suggestion-template.md` | **新增** 教训 22 的来源上下文——调研建议从话题清单升级为可执行调研简报（5 字段模板 + 类型分类 + 非洞见驱动建议） |
+| `references/research-suggestion-template.md` | **新增** 教训 22 的来源上下文——调研建议从话题清单升级为可执行调研简报（5 字段模板 + 类型分类 / 非洞见驱动建议） |
 | `templates/five-dimension-analysis.md` | 结构 A 模板（5 维；v3 用户批准版本，≤ 8 KB 默认推荐） |
 | `templates/event-flow-judgment.md` | 结构 B 模板（事件流 + 判断流） |

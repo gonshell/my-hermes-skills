@@ -58,11 +58,9 @@ GET https://api.bilibili.com/x/web-interface/popular?ps=50&pn=1
 - 返回 `data.list[]`，字段结构与 ranking API 相同（`title/bvid/owner.name/stat.view/stat.like/duration`）
 - **pn=1~10 各 50 条，共 500 条**（2026-06-17 确认 pn=6~10 正常返回，不受限流）
 - 与 ranking + search 合并去重后可得 500+ 条唯一视频
-- **缺点**：全站热门，AI 内容占比低（~5%），不如 search API 精准
+- **缺点**：全站热门，AI 内容占比极低（2026-06-19 实测：206 条中仅 1 条，~0.5%），**不能作为 AI 内容唯一数据源，必须搭配 search API**
 - **优点**：稳定不限流，作为 search API 被限流时的 fallback
-- **JSON 控制字符问题**：popular API 返回的 JSON 含控制字符，`json.loads()` 会失败。用 hermes_tools 内置的 `json_parse(resp['output'])` 处理，或写文件再读
-- **优点**：稳定不限流，作为 search API 被限流时的 fallback
-- **JSON 控制字符问题**：popular API 返回的 JSON 含控制字符，`json.loads()` 会失败。用 hermes_tools 内置的 `json_parse(resp['output'])` 处理，或写文件再读
+- **JSON 控制字符问题**：popular API 返回的 JSON 含控制字符，`json.loads(s)` 会失败。用 `json.loads(s, strict=False)` 或写文件再读（**不要用 execute_code 中的 `json_parse()`，它不是全局函数，会报 NameError**）
 
 ## AI 关键词列表（过滤用，2026-06-10 实测更新）
 
@@ -202,8 +200,10 @@ for kw in ai_keywords:
 - `execute_code` 比 `terminal` 更适合运行多行 Python 脚本（无 shell 转义问题）
 - 标题中的 `<em class="keyword">` 和 `</em>` HTML 标签需要替换
 - **必须应用 `is_ai_title` 黑名单二次过滤**，避免 K-pop "GPT"、健身教程、芯片评测等假阳性
+- **英文关键词必须用 `\b` word-boundary 正则**，避免 "AI" 匹配 "maintain/captain/again" 等假阳性（详见 `<references/bilibili-ai-trending-pitfalls-2026-06-19.md>`）
 - **HTML 实体解码**：标题中可能含 `&quot;` 等 HTML 实体，需 `html.unescape()` 解码后再做 XML 转义，否则产生 `&amp;quot;` 双重编码
 - **play/like 类型不一致**：search/type API 的 `play`/`like` 可能是整数或字符串 `'-'`，需安全转换
+- **中文关键词含空格的查询返回空**：用 `urllib.parse.quote()` 编码后拼接 URL，或优先用单关键词多次请求（2026-06-19 实测：15 个单关键词全部返回 20 条，含空格组合查询全部返回空）
 
 ### 方法2：排行榜 API（备选）
 

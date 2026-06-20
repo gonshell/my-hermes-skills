@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选）
+# YouTube 不可达时的替代数据源（2026-06-01 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选，**2026-06-20 晚间档新增 4 维质量过滤 + B站 search API 412 节流模式**）
 
 ## ⚠️ Cron job prompt 中的"格式规范"是错误的（2026-06-14 早间档再次确认）
 
@@ -110,19 +110,152 @@ def fetch_bv(bv):
 
 ---
 
-## 06:00 CST 早间档 推荐流程（2026-06-14 综合）
+## 06:00 CST 早间档 推荐流程（2026-06-14 综合，2026-06-20 早间档修正）
 
 确认 YouTube HTTP 000 后：
 
 1. **检测 + 跳过 YouTube 浏览器**（`curl` 一下确认，不要 60s 反复试浏览器）
 2. **curl Bing 视频搜索**（1-2 个 query）→ `grep -oE '/video/BV[A-Za-z0-9]{10}'` 提取 BVID（**不依赖 aria-label 语言**）
-3. **Bilibili search API**（`urllib.parse.quote` 编码关键词）→ 获取更多 BVID
-4. **对所有 BVID 批量调 `/x/web-interface/view` API**（Bing + B站 30-90 条，串行 ~0.3s sleep）→ 拿标题/播放量/时长/UP主/上传时间
+3. ~~**Bilibili search API**（`urllib.parse.quote` 编码关键词）→ 获取更多 BVID~~ — ⚠️ **2026-06-20 实测：早间档 06:00 CST 不要走 `/x/web-interface/search/type?order=pubdate` 补量！** 见下文"B站 search API by-date 早间档垃圾坑"。直接用 Bing 数据按 view 排序就够了
+4. **对所有 BVID 批量调 `/x/web-interface/view` API**（Bing 30-40 条足够，串行 ~0.3s sleep）→ 拿标题/播放量/时长/UP主/上传时间
 5. **Python 内 classify + sort**：按 `duration` 切长短（阈值 180s），按 `view` 排热度，按 `pubdate` 排新发
 6. **写 XML**（DocxXML 模板，**忽略 prompt 里的 `<YouTubeTrending>` 误导**）
 7. **lark-cli 上传**（`+update --command overwrite --doc-format xml`），期望 `ok: true` + 2 个 `degrade_code=4007` warnings（无害）
 
-**总耗时**：~2-3 分钟
+**总耗时**：~1-2 分钟
+
+### ⚠️ B站 search API by-date 早间档垃圾坑（2026-06-20 早间档实测新增）
+
+**反例**：2026-06-20 06:02 CST 跑 `https://api.bilibili.com/x/web-interface/search/type?keyword=AI&order=pubdate&page=1`，**前 10 条全是垃圾**：
+
+| 标题 | 频道 | 播放量 | 类型 |
+|------|------|--------|------|
+| ETCSP2026款隐藏式AI屏幕语音无卡etc设备 | 好物推荐 | 0 | ETC 设备广告 |
+| 国产大模型连续七周霸榜全球｜英首相被自己人逼宫｜食肉蛆虫时隔60年重返美国 | 世界又发生了啥 | 4 | 新闻汇编（非 AI 主题） |
+| ai真好玩 | 鹤望兰ZERO米浴 | 0 | 灌水 |
+| GPT预测世界杯系列: 复盘，瑞典VS突尼斯（×6 条同样格式） | zerocool40 | 0-4 | 世界杯 AI 预测灌水 |
+
+**关键观察**：
+- 早间档 06:00 CST 触发时，B站按 pubdate 排序返回的是**当日 0-6 小时内上传的所有内容**，里面 AI 早报没发（07:00+），剩下全是低质刷量或蹭 AI 关键词的灌水
+- 这些 0-view 内容调 `/view` API 后 `stat.view = 0` 仍然入库，污染整个 TOP 10
+- B站热门榜（`/x/web-interface/popular`）+ 多关键词 search-hot 路径**也只能补充 ~150 条候选**，**全部走 `/view` 后 AI 关键词过滤后**还是 Bing 的 40 条更干净
+
+**正确做法**（更新后的早间档流程）：
+1. **只用 Bing 一个数据源**（1-2 个 query → 40 个 BVID → 37 条 AI-relevant）
+2. **不要**用 B站 search API by-date 补"当日新发"——会被 0-view 灌水淹没
+3. **News 类用 Bing 的现有数据按 pubdate 倒序排**，接受时间范围 5月-6月（最新条目通常是 5月18日），在飞书文档顶部加一行说明：
+
+```xml
+<p>06:00 CST 早间档触发，中文 AI 早报生态（橘鸦Juya / 阿梨等）07:00-10:00 CST 才发布当日内容，Bing 视频搜索也未及时收录当日新发，"最近上传"列表反映 1-2 周内的 AI 热门视频，按上传时间倒序排列。</p>
+```
+
+4. **晚间档 20:00 CST 才用 B站 search API by-date 补"当日新发"**——此时 B 站 AI 早报生态已发完，按 pubdate 排序才有真正的当日 AI 内容
+
+### ⚠️ Bing 数据时间范围偏旧（2026-06-20 早间档实测新增）
+
+**反例**：2026-06-20 06:02 CST Bing 视频搜索返回的 40 条 BVID 中，**最"新"的条目是 2026-05-18**（1 个月前），没有任何 24-48 小时内的"今日热门"。
+
+**原因**：
+- Bing 视频搜索在中文网络出口下聚合的是**已经积累了一定播放量的视频**（质量门槛过滤），新上传 0-view 视频不会冒头
+- 即使 Bing 返回"X 小时之前"的视频，aria-label 里的"上传时间"是 Bing 抓取索引的时间，不是视频实际发布时间
+- AI 早报生态（橘鸦等）的视频 Bing 索引滞后 1-7 天
+
+**对飞书文档的影响**：
+- 长视频/短视频 TOP 10 数据质量 OK（播放量真实、UP主真实、内容真实）
+- "当日新发 TOP 10"在 06:00 CST 早间档**永远无法**凑齐真正当日发布的 AI 内容
+- **不要为了凑数放宽阈值**（如"最近 30 天"），保持"最近上传"语义清晰即可
+- 在文档里**明确标注时间范围**让用户清楚知道这是"近 1-2 周内最热"
+
+### 早间档 vs 晚间档 数据源选择（2026-06-20 综合，**2026-06-20 晚间档实测修正**）
+
+| 时段 | 长视频 TOP 10 | 短视频 TOP 5 | 当日新发 TOP 10 |
+|------|---------------|--------------|-----------------|
+| **早间档 06:00 CST** | Bing (按 view) | Bing (duration ≤ 180s, 按 view) | Bing (按 pubdate 倒序，**仅作为最近参考**，加时间范围说明) |
+| **晚间档 20:00 CST** | Bing + B站 hot | Bing + B站 hot | **B站 search API `order=pubdate`（此时 AI 早报已发完） + 4 维质量过滤后按 view 排序** |
+
+> **2026-06-20 20:00 CST 晚间档实测**：B站 search API 在 7 个 query 中有 5 个被 412 节流拒绝，**只有 `AI日报` 和 `ChatGPT` 返回 200 OK**（每个 20 条）。Bing 一如既往 38 个 BVID。**当日新发 21 条 2026-06-20 上传 → 19 条通过质量过滤 → 0-view / 1 词标题 / 1 字用户名垃圾被剔除**。完整 4 维质量过滤配方见下文"晚间档 4 维质量过滤"小节。
+
+### 晚间档 4 维质量过滤（2026-06-20 实测，剔除 0-view 灌水的关键）
+
+B站 search API `order=pubdate` 在 20:00 CST 触发时返回的内容**仍然有 30-50% 是低质刷量或蹭 AI 关键词的灌水**（0-view、1 词标题、1 字用户名、UP主无头像），必须用 4 维过滤才能凑出干净的 TOP 10：
+
+```python
+def is_ai_relevant(title):
+    t = title.lower()
+    if 'illustrator' in t: return False
+    bad = ['赌', '押注', '理财', '赌狗', '赌资', '赌场', '彩票', '美瞳', '美甲',
+           '减肥', '瘦身', '按摩', '养生', '医美', '植发', '隆胸', '相亲']
+    if any(k in title for k in bad): return False
+    bad_ent = ['星际争霸', '外星人', '虫族', '俘虏', '波兰球', 'NBA', '小病',
+               '成为虫族', '世界杯', '足球', '篮球', 'CBA', 'F1', '赛车', '漫展', 'cos']
+    if any(k in title for k in bad_ent): return False
+    return True
+
+# 强 AI 关键词白名单（大小写不敏感）
+AI_KW = ['AI', 'Gpt', 'gpt', 'ChatGpt', 'chatgpt', 'Claude', 'claude', 'Gemini', 'gemini',
+         '大模型', '大语言', 'LLM', 'llm', '深度学习', '神经网络', '机器学习', 'AGI', 'agi',
+         'Sora', 'Midjourney', 'Stable Diffusion', 'Diffusion', 'ComfyUI', 'Copilot', 'cursor',
+         'MCP', 'Agent', '智能体', 'Llama', 'llama', 'Mistral', 'mistral', 'DeepSeek', 'deepseek',
+         '文心一言', '通义千问', '盘古', '混元', 'Kimi', 'kimi', 'Grok', 'grok',
+         'AI日报', 'AI早报', 'AI周报', 'AI工具', 'OpenAI', 'openai', 'Anthropic', 'anthropic',
+         'Prompt', '提示词', 'Transformer', 'transformer', 'MoE', 'Mamba', 'mamba',
+         'RAG', 'rag', 'Embedding', 'embedding', 'Token', 'token', 'LangChain', 'langchain',
+         'Hugging Face', 'HuggingFace', 'GitHub Copilot', 'DALL', 'Whisper', 'Runway', 'Pika', 'Suno', 'Udio',
+         'Robot', '机器狗', '波士顿动力', '具身智能', '自动驾驶', 'FSD',
+         '图像生成', '视频生成', '语音合成', 'TTS', 'ASR', 'NLP', '强化学习', 'RLHF', 'DPO',
+         'AI编程', 'Cursor', 'Codeium', 'Cline', 'Continue', 'GenAI', 'AIGC', '超级智能']
+
+def looks_like_ai(title):
+    return any(k in title for k in AI_KW)
+
+def is_quality_news(d):
+    """4 维质量门 — 任何一维不过就丢"""
+    if d['view'] < 5: return False          # 维度1: 播放量门槛（拒 0-view 灌水）
+    if d['duration'] <= 0: return False     # 维度2: 时长合法
+    t = d.get('title', '').strip()
+    if len(t) < 4: return False             # 维度3: 标题非单字（拒"chatgpt" "AI" "GPT"）
+    o = d.get('owner', '').strip()
+    if len(o) < 2: return False             # 维度4: UP主名非 1 字（拒"user_xxx"自动账号）
+    return True
+
+# 组合调用
+news_top10 = sorted(
+    [d for d in today_pool if looks_like_ai(d['title'])
+                              and is_ai_relevant(d['title'])
+                              and is_quality_news(d)],
+    key=lambda x: (-x['view'], -x['pubdate'])
+)[:10]
+```
+
+**实测 4 维过滤效果**（2026-06-20 21:00 CST）：
+
+| 阶段 | 数量 | 例子 |
+|------|------|------|
+| 原始 API 返回 | 40 | 含 "chatgpt"(0view), "AI"(0view), ETC 设备 |
+| AI 关键词白名单 | 28 | 滤掉 12 条无关 |
+| `is_ai_relevant` 黑名单 | 28 | 暂无娱乐/赌博项 |
+| 4 维质量门 | 19 | 滤掉 9 条 0-view / 单字标题 / 单字用户名 |
+| **最终 TOP 10** | **10** | infinite灵感港 / 阿梨Aria / _AI风向标_ / 硅基考古队 / 江枫_AI 等真实 AI 日报 |
+
+### B站 search API 412 节流模式（2026-06-20 晚间档实测）
+
+`/x/web-interface/search/type?keyword=...&order=...` 端点对**单 IP 短时间内大量 query**触发 412 Precondition Failed 节流。2026-06-20 20:05 CST 实测 7 个 query：
+
+| Keyword | Order | Status | 备注 |
+|---------|-------|--------|------|
+| `AI早报` | pubdate | **412** | 高频词先被限流 |
+| `AI日报` | pubdate | **200** | ✅ 20 条 |
+| `ChatGPT` | pubdate | **200** | ✅ 20 条 |
+| `Claude` | pubdate | **412** | |
+| `Gemini` | pubdate | **412** | |
+| `AI 人工智能` | hot | **412** | |
+| `AI 2026` | hot | **412** | |
+
+**结论**：
+- 7 个 query 只命中 2 个（28.5%），节流很激进
+- **不要一次性发 7 个 query** —— 间隔太短都会 412。建议每 query 间隔 0.4-0.5s，且总 query 数 ≤ 3
+- 命中的 2 个 query 足够凑出 40 条候选 → 4 维过滤 → 10 条 TOP
+- **备选降级**：如果 7 个 query 全 412，回退到 Bing 视频搜索的"按时间排序"（虽然数据偏旧，1-2 周前）
 
 ---
 

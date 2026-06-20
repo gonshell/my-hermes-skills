@@ -1,46 +1,27 @@
-# My Hermes Skills
+# my-hermes-skills
 
-个人 Hermes Agent Skills 备份仓库，通过 cron 每日自动同步。
+Auto-synced mirror of `~/.hermes/skills/` (the user-installed Hermes skills collection).
 
-## 同步机制
+This repo is updated nightly by a scheduled cron job that copies the live skills directory here and pushes to `main`.
 
-- **源目录**: `~/.hermes/skills/`
-- **同步脚本**: `devops/hermes-skills-git-sync/scripts/sync.sh`
-- **执行方式**: cron 每日 23:00 自动运行
-- **同步策略**: `rsync -aL --delete`（跟随软链接，复制真实内容）
+## Layout
 
-## 手动同步
+Each top-level folder is one Hermes skill (a `SKILL.md` plus optional `references/`, `templates/`, `scripts/`, `assets/`).
 
-```bash
-# 执行同步
-bash ~/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
-```
+Skill categories include:
 
-## 目录结构
+- **Productivity**: `lark-*`, `notion`, `pptx-generator`, `powerpoint`, `airtable`, `linear`, `nano-pdf`, `workspace-organization`, `editorial-multi-agent`, `document-content-workflow`, `teams-meeting-pipeline`, `reflect-then-confirm`
+- **Dev / coding**: `github`, `agentic-development`, `superpowers`, `plan`, `simplify-code`, `test-driven-development`, `hermes-agent-skill-authoring`, `hiclaw`, `hermes-s6-container-supervision`
+- **Data / ML**: `mlops/*`, `data-science/*`, `mlops/evaluation`, `mlops/inference`, `mlops/training`, `jupyter-live-kernel`, `pdf-to-qa-csv`, `aircraft-casting-expert`
+- **Research / docs**: `arxiv`, `arxiv-to-wiki`, `llm-wiki`, `polymarket`, `blogwatcher`, `find-classical-cs-papers`, `ai-agent-research`, `feishu-content-analysis`, `tech-research-doc`, `nano-pdf`
+- **Media / creative**: `creative/*` (ascii, manim, p5js, comfyui, etc.), `media/*` (gif, songsee, spotify, video-content-workflow), `frontend-design`, `popular-web-designs`, `sketch`, `pixel-art`, `ascii-video`, `manim-video`, `comfyui`, `songwriting-and-ai-music`, `baoyu-*`
+- **Social / messaging**: `imessage`, `weibo-cli`, `xurl`, `email`, `agentmail`, `yuanbao`
+- **Smart home / IoT**: `openhue`, `findmy`, `find-nearby`
+- **Gaming**: `minecraft-modpack-server`, `pokemon-player`
+- **Other utilities**: `humanizer-zh`, `humanizer`, `red-teaming/godmode`, `codebase-exploration`, `session-state-verification`, `mcp/native-mcp`, `mcp/mcporter`
 
-```
-my-hermes-skills/
-├── .archive/                    # 已归档的 skills
-├── apple/                       # Apple/macOS 相关
-├── autonomous-ai-agents/        # AI Agent 编排
-├── creative/                    # 创意内容生成
-├── data-science/                # 数据科学
-├── devops/                      # DevOps 工具
-├── lark-*/                      # 飞书系列 skills（23 个）
-├── mlops/                       # MLOps 工具
-├── productivity/                # 生产力工具
-├── research/                    # 研究工具
-├── software-development/        # 软件开发
-├── tech-blog/                   # 技术博客
-└── ...
-```
+## Notes
 
-## Skills 统计
-
-- 164 个 skills 已启用
-- 23 个飞书相关 skills
-- 9 个 hub 安装的 skills
-
-## License
-
-MIT License
+- Runtime metadata (`.usage.json`, `.archive/`, `.hub/`, `.curator_*`, `.bundled_manifest`) is **not** synced — see `.gitignore`.
+- Python virtualenvs (`.venv/`) inside skill sub-projects are excluded.
+- Updated nightly by a cron job — manual edits here will be overwritten on the next sync.

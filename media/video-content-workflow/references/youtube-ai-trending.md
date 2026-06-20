@@ -35,6 +35,32 @@ https://www.youtube.com/results?search_query=<query>&sp=CAMSBAgEEAE%253D
 
 ## 数据提取 JS（长视频）
 
+### 精细提取（推荐，2026-06-19 验证）
+
+返回独立字段，便于后续排序/过滤：
+
+```javascript
+Array.from(document.querySelectorAll('ytd-video-renderer')).map(el => {
+  const titleEl = el.querySelector('#video-title');
+  const title = titleEl?.textContent?.trim() || '';
+  const href = titleEl?.href || '';
+  const spans = el.querySelectorAll('#metadata-line span');
+  let viewCount = '', date = '';
+  spans.forEach(span => {
+    const text = span.textContent.trim();
+    if (text.includes('次观看') || text.includes('views')) viewCount = text;
+    else if (text.includes('前') || text.includes('ago')) date = text;
+  });
+  const channel = el.querySelector('#channel-name a, #channel-info a')?.textContent?.trim() || '';
+  const duration = el.querySelector('ytd-thumbnail-overlay-time-status-renderer #text')?.textContent?.trim() || '';
+  if (title) return {title, href, viewCount, date, channel, duration};
+}).filter(Boolean)
+```
+
+> ⚠️ 变量名冲突：同一页面连续执行多次 JS 时，`const` 声明的变量名不能重复（如 `videos`、`vidData`）。每次执行需用不同变量名，或用 IIFE `(function(){ ... })()` 包装。
+
+### 快速提取（备选）
+
 ```javascript
 Array.from(document.querySelectorAll('ytd-video-renderer')).slice(0, 20).map((v, i) => {
   const titleEl = v.querySelector('#video-title');
@@ -124,6 +150,16 @@ YouTube 搜索结果为懒加载（lazy render），但 `ytd-video-renderer` 在
 时间戳示例：`"4.4万次观看 · 1天前"`（不含分钟/小时）不匹配，`"2415次观看 · 15小时前"` 匹配。
 
 注意：该标签页通常只返回 4-6 条，是获取当日最新视频的补充方式。如需凑满 TOP 10，需配合 "全部" 标签页中时间戳含"分钟"或"小时"的条目补充。
+
+## 验证飞书文档写入
+
+写入后用 `+fetch` 确认内容渲染正确：
+
+```bash
+lark-cli docs +fetch --api-version v2 --doc "<doc_id>" --scope full
+```
+
+`--scope full` 返回完整文档内容（含 HTML 标签），可确认 `<h1>`、`<h2>`、`<ol>`、`<a>` 等标签是否正确解析。`--scope outline` 只返回标题层级，适合快速检查目录结构。
 
 ## 飞书文档写入
 
