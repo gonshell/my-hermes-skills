@@ -21,6 +21,44 @@
 
 ## Python 解析代码（可直接复用）
 
+### 主力解析器（宽松正则，2026-06-21 验证通过）
+
+参考文档里的严格正则（`来源：xxx | 摘要：xxx` 固定格式）在实际 doc 中经常匹配失败，
+因为实际格式有变体（来源用 `/` 分隔、摘要换行、`<br/>` 位置不固定）。
+**推荐用下面的宽松版**：
+
+```python
+import re, json
+from collections import Counter
+
+def parse_event_stream_relaxed(content):
+    """宽松解析 SWLX 类事件流 doc。容忍格式变体。"""
+    events = []
+    for date_str, section in re.findall(
+        r'<h2>(\d{4}年\d{2}月\d{2}日[^<]*)</h2>(.*?)(?=<h2>|$)', content, re.S
+    ):
+        for num, title, rest in re.findall(
+            r'<b>(\d+)\.\s*(.+?)</b>\s*(.*?)(?=<b>\d+\.|$)', section, re.S
+        ):
+            source_m = re.search(r'来源\s*[:：]\s*(.+?)(?:\n|<br|摘要)', rest)
+            summary_m = re.search(r'摘要\s*[:：]\s*(.+?)(?:\n|<br|$)', rest, re.S)
+            events.append({
+                'date': date_str.strip(),
+                'num': int(num),
+                'title': title.strip(),
+                'source': source_m.group(1).strip() if source_m else '',
+                'summary': summary_m.group(1).strip()[:150] if summary_m else '',
+            })
+    return events
+```
+
+**与严格版的区别**：
+- 标题提取用 `(.+?)` 而不是 `([^<]+)`——容忍标题含 HTML 标签
+- 事件分隔用 `(?=<b>\d+\.|$)` 而不是依赖 `<br/>`——不要求 `<br/>` 存在
+- 来源/摘要用 `(?:\n|<br|摘要)` 前瞻——容忍多种分隔符
+
+### 严格解析器（原始版，格式完全一致时可用）
+
 ```python
 import re
 import json

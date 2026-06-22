@@ -58,12 +58,13 @@ runtime_invariants:
 | `HhyMdusqdoVcW9xLyd2c2Yc2nnf` | YouTube 晚间档视频清单 | 视频（英文 YouTube）| 20:00 |
 | `Virbd3YyBoYK9XxqaZOccEGRnio` | B 站 AI 视频清单（6-13） | 视频（B 站）| 21:00 |
 | `SWLXdMOQXoi0WFxML3zcDXuCnTd` | 每日 AI 新闻早报 | **事件流**（按日期分组的结构化新闻，非视频）| 单独 |
-| `ZzPad3g4NotV9OxUO9WcLTpAnEd` | B 站 AI 工具视频合集（6-7~6-11）| 视频（B 站，与 Virb 时间窗互补）| 单独 |
+| `ZzPad3g4NotV9OxUO9WcLTpAnEd` | B 站 AI 工具视频合集（7 天 × 每日 TOP 27）| 视频（B 站，与 Virb 时间窗互补）| 单独 |
 
 **类型说明**：
-- 3 个视频 doc（YouTube × 2 + B 站 × 1）= 72 条视频，**反映"用户看什么"**
-- 1 个事件流 doc（AI 新闻早报）= 130+ 条结构化新闻事件，**反映"行业发生什么"**
-- 1 个时间窗互补 B 站 doc = 135 条视频（5 天 × 27），**扩展时间窗**
+- 3 个视频 doc（YouTube × 2 + B 站 × 1）= 64 条视频，**反映"用户看什么"**
+- 1 个事件流 doc（AI 新闻早报）= 114 条结构化新闻事件（8 天），**反映"行业发生什么"**
+- 1 个时间窗互补 B 站 doc = 216 条视频（7 天 × 每日 TOP 27），**扩展时间窗 + 标签维度**（deepseek 42% / chatgpt 18% / claude 9%）
+- ZzPa 有 47 组重复标题（同一视频在不同日期上榜），分析前需按标题去重
 
 **两者互补**：视频 doc 反映"用户兴趣"（带播放量、UP 主维度），事件流 doc 反映"行业全景"（带来源媒体、完整事件链）。综合分析时**必须交叉验证**。
 
@@ -415,9 +416,9 @@ lark-cli docs +update --api-version v2 \
 - 用户说"读出到聊天" → 不写飞书，直接 send_message 报告摘要
 
 ### 报告长度
-- 5 doc / 200+ 条数据 → ~25-30 KB Markdown
+- 5 doc / 394 条数据 → ~35-40 KB Markdown
 - 3 doc / 72 条数据 → ~17-20 KB
-- **不要超 35 KB**（飞书 doc 加载慢）
+- **不要超 40 KB**（飞书 doc 加载慢），35-40 KB 是 5 doc 全量报告的正常范围
 
 ---
 
@@ -532,6 +533,35 @@ for j in d['jobs']:
       # 解析 <p><b>N.</b> 标题</p><blockquote>...链接...</blockquote>
   ```
 
+### P1：ZzPa blockquote 内元数据用 emoji 分隔符，不是中文字段名
+- **症状**：用 `频道：xxx` / `播放：xxx` 正则解析 ZzPa blockquote 得到 0 条——元数据字段全空
+- **根因**：ZzPa blockquote 的元数据格式是 **emoji 标记 + `｜` 分隔**，不是其他 doc 的 `频道：xxx` 格式
+- **实际格式**：
+  ```html
+  <blockquote><p>👤 UP主名 ｜ 🎬 1:14 ｜ 👀 <b>2687</b> ｜ ❤️ 645 ｜ 📅 0天前<br/>🔗 <a href="...">链接</a><br/>🏷️ deepseek</p></blockquote>
+  ```
+- **正确解析正则**：
+  ```python
+  # 提取条目
+  for num, title, meta in re.findall(
+      r'<p><b>(\d+)\.\s*</b>\s*(.*?)</p>\s*<blockquote>(.*?)</blockquote>',
+      zzpa_body, re.S
+  ):
+      mc = re.sub(r'<[^>]+>', ' ', meta)  # 去 HTML 标签
+      channel = re.search(r'👤\s*(.+?)\s*｜', mc)
+      duration = re.search(r'🎬\s*(.+?)\s*｜', mc)
+      views    = re.search(r'👀\s*(.+?)\s*｜', mc)
+      likes    = re.search(r'❤️\s*(.+?)\s*｜', mc)
+      upload   = re.search(r'📅\s*(.+?)(?:\s*｜|\s*$)', mc)
+      tag      = re.search(r'🏷️\s*(.+?)(?:\s*$)', mc)
+      url      = re.search(r'href="?(https://www\.bilibili\.com/video/[^"\\]+)', meta)
+  ```
+- **反例（会得到空值）**：
+  ```python
+  channel = re.search(r'频道\s*[:：]\s*(.+?)(?:\s|$)', mc)  # 0 匹配
+  views   = re.search(r'播放\s*[:：]\s*(.+?)(?:\s|$)', mc)  # 0 匹配
+  ```
+
 ### P1：SWLX 事件流标题在 `<b>...</b>` 里，不是 `<text>`
 - **症状**：用 `<b>N.</b> <text>标题</text>` 正则找不到 SWLX 事件
 - **根因**：SWLX 实际格式是 `<b>1. 完整标题</b><br/>来源：xxx<br/>摘要：xxx`——**整条标题都在 `<b>` 标签里**，没有第二个 `<text>` 标签
@@ -612,6 +642,30 @@ for j in d['jobs']:
   - 第一轮报告：用户给了多个 doc token，agent 只读了晚间档 1 个（25 条），其余 100+ 条 B 站 + 早间档 + 事件流**全部漏读**。主题严重偏向英文 YouTube 行业事件
   - 修复后用户又加了 2 个新 doc（事件流 SWLX + 时间窗互补 B 站 ZzPa），变成 5 doc。如果不及时更新 skill，又会发生"只读 3 个老的、漏 2 个新的"
 
+### P0：execute_code 变量不持久——每次调用都是全新沙箱
+- **症状**：第一个 execute_code 解析了 5 个 doc 赋值给 `ebhd`/`hhym`/`virb`/`swlx`/`zzpa`，第二个 execute_code 引用这些变量报 `NameError: name 'ebhd' is not defined`
+- **根因**：execute_code 每次调用启动全新 Python 进程，前一次的变量不保留
+- **解法（二选一）**：
+  1. **单脚本全包**：把解析 + 汇总 + 报告生成写进同一个 execute_code 调用（推荐——避免重复解析浪费时间）
+  2. **中间文件中转**：第一个 execute_code 解析后 `json.dump` 到 `/tmp/parsed_data.json`，后续调用 `json.load` 读回来
+- **反例**：分 5 个 execute_code 分别做"解析 EBHD → 解析 HHYM → 解析 VIRB → 汇总 → 写报告"——每个都报 NameError，被迫每个都重载全部数据
+- **正例**：一个大 execute_code 里完成所有解析 + 汇总 + 报告生成 + write_file
+
+### P1：lark-cli +create 不接受空 content
+- **症状**：`lark-cli docs +create --title "xxx"` 报错 `--content is required`
+- **解法**：先用最小内容创建，再用 `+update overwrite` 写入完整内容
+  ```bash
+  # 步骤 1：创建（带占位内容）
+  lark-cli docs +create --api-version v2 --title "报告标题" \
+    --doc-format markdown --content "# 占位"
+  # 拿到 document_id
+  
+  # 步骤 2：覆盖写入完整内容
+  lark-cli docs +update --api-version v2 --doc {document_id} \
+    --doc-format markdown --command overwrite \
+    --content @./report.md
+  ```
+
 ### P0：HERMES HOME 路径（单层，不是双层嵌套）
 - **症状**：错误认为 `~/.hermes/` 指向 `~/.hermes/home/.hermes/`（双层嵌套）
 - **实际**：`$HERMES_HOME=/Users/xiesg/.hermes`（**单层**），skills 在 `$HERMES_HOME/skills/` 下直接放顶层
@@ -625,6 +679,7 @@ for j in d['jobs']:
 
 ### 参考资料
 - `references/event-stream-doc-parsing.md`：事件流 doc（SWLX）完整解析配方
+- `references/zzpa-emoji-parsing.md`：ZzPa B站工具合集 emoji 元数据解析配方
 - `references/multi-source-cross-validation.md`：5 doc 交叉验证矩阵
 - `references/lark-drive-ownership-ops.md`：飞书云文档所有权管理操作（转移 / 删除 / 权限查询）
 
@@ -654,6 +709,7 @@ for j in d['jobs']:
 
 - [ ] 5 doc token 全部拉取到完整内容（`--doc-format xml --scope full`）
 - [ ] 4 个视频 doc 视频清单全部解析（条数 / 播放量 / 频道 / 时长 / 上传日期）
+- [ ] ZzPa 去重完成（原始 216 条 → 去重后 ~120 条独立视频），附录用去重版本
 - [ ] 1 个事件流 doc（SWLX）按日期切分解析（日期 / 编号 / 标题 / 来源媒体 / 摘要）
 - [ ] 跨 doc 数据汇总（条数 / 播放量分布 / 重复检测 / 频道频次）
 - [ ] 数据底座 callout 含播放量（不是只有条数）

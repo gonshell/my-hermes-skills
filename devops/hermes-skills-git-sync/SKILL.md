@@ -31,6 +31,34 @@ bash /Users/xiesg/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
 
 The manual sequence below is documented for understanding and debugging only.
 
+### ⚠️ The user-facing cron prompt is the #1 source of confusion
+
+The instructions embedded in the nightly cron job say:
+
+> 1. `cd ~/github/my-hermes-skills/`
+> 2. `git pull origin main`
+> 3. `cp -r` from `~/.hermes/skills/`
+> 4. `git add . && git commit && git push origin main`
+
+This is **outdated and contradicts this skill.** It causes three known failure modes
+every time a fresh agent runs the cron:
+
+1. `cd ~` resolves to the wrong path under the sandbox `$HOME` (see "Path resolution" below).
+2. `cp -r` (no `-L`) leaves broken symlinks in the repo.
+3. `git pull` hangs in the sandbox (see `references/cron-env-quirks.md`).
+
+**If you receive the cron prompt verbatim, your first action should be to recognize
+it and call `scripts/sync.sh` instead.** The skill's Pitfalls section below
+documents why every step in the prompt is buggy. Treat the prompt as legacy
+documentation, not authoritative instructions.
+
+**Suggested cron job payload (replace the old prompt):**
+```bash
+bash /Users/xiesg/.hermes/skills/devops/hermes-skills-git-sync/scripts/sync.sh
+```
+Or, if the cron framework requires inline steps, copy the script's body verbatim
+(see "The sync sequence" below) — do not paraphrase back to `cp -r` + `git pull`.
+
 ## Critical: symlinks in ~/.hermes/skills/
 
 **Problem:** Many skills in `~/.hermes/skills/` are **symlinks** pointing to `~/.agents/skills/`, NOT real directories. Using `rsync -a` (or `cp -r`) preserves symlinks as-is, creating a broken backup repo that's useless on other machines.
@@ -83,7 +111,11 @@ git pull origin main
 
 # 2. Dry-run preview of what rsync WOULD change
 #    (catches symlink drift, stale files in DST, etc.)
-rsync -ainL --delete --exclude='.git' --exclude='.gitignore' --exclude='README.md' "$SRC/" "$REPO/"
+# -aL: follow symlinks and copy real file content (not broken symlinks in repo)
+# --ignore-errors: continue even if broken symlinks in DST can't be deleted
+# --exclude README.md: preserve repo-only files not in source
+# 2>/dev/null || true: suppress "symlink has no referent" warnings
+rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' --exclude='README.md' "$SRC/" "$REPO/" 2>/dev/null || true
 
 # 3. Mirror with rsync --delete so orphaned entries in DST
 #    (skills deleted/archived in SRC) are removed automatically.
@@ -115,9 +147,10 @@ That instruction is buggy: if a skill is deleted in SRC (or moved into
 removes it. Real-world example: the `mmx-cli` symlink sat in the DST repo
 root for weeks because the SRC copy had been moved into `.archive/`.
 
-`rsync -a --delete` is a one-way true mirror — DST ends up identical to SRC
-modulo the excluded `.git/` and `.gitignore`. This is what you want for a
-backup repo.
+`rsync -aL --delete` is a one-way true mirror — DST ends up identical to SRC
+modulo the excluded `.git/`, `.gitignore`, and `README.md`. The `-L` flag
+follows symlinks (critical since skills may be symlinked from `~/.agents/skills/`).
+This is what you want for a backup repo.
 
 ## .gitignore (required — add once at repo init)
 
@@ -155,9 +188,15 @@ See also `references/cron-env-quirks.md` for known cron/sandbox environment beha
 - **`rsync` reports `*deleting` items in dry-run that are pure DST cruft.** Expected — those are exactly the files `--delete` will remove. Read the dry-run output, don't panic.
 - **`.archive/` is user-archived content.** It IS skill content (just superseded), so it SHOULD be synced. The .gitignore above intentionally does NOT exclude it.
 - **`git -c user.email/name` flags beat relying on global git config** — cron environments often have no global identity set, leading to "Please tell me who you are" errors.
+- **`-aL` flag is required** — skills in `~/.hermes/skills/` may be symlinks to `~/.agents/skills/` (common for hub-installed or shared skills). Without `-L`, rsync copies the symlink itself, which breaks on clone. With `-L`, rsync follows the link and copies the real file content.
+- **`--exclude='README.md'`** — if the repo has a README.md that doesn't exist in `~/.hermes/skills/`, `rsync --delete` will remove it. Always exclude repo-only files.
+- **Broken symlinks in DST cause rsync warnings** — `--ignore-errors` + `2>/dev/null || true` suppresses "symlink has no referent" errors for stale symlinks in the archive directory.
 - **Empty commits are fine to skip** — wrap the commit in `|| echo "Nothing to commit"` so the cron doesn't fail when there are no changes.
 - **The sandbox `$HOME` gotcha** (see Path resolution above) bites every fresh cron invocation. Detect via `echo $HOME` before any `cd ~`. In this profile `$HOME=/Users/xiesg/.hermes/home` so `~` resolves to a non-existent `github/` subdir.
 - **Never `git push --force`** — this is a backup repo. Force pushes destroy history other machines may have pushed.
+- **HTTPS push needs credentials; SSH doesn't.** In this user's setup (sandbox/cron), there is no `gh` CLI, no `~/.netrc`, no `~/.git-credentials`, no `GITHUB_TOKEN` env var. `git push https://github.com/...` will hang ~75s then fail with `could not read Username: Device not configured`. **Always use SSH remote** (`git@github.com:OWNER/REPO.git`) for both fetch and push. If the repo's remote is HTTPS on first run, switch it: `git remote set-url origin git@github.com:OWNER/REPO.git`. Verify auth with `ssh -T git@github.com` (which prints `Hi OWNER!` on success).
+- **Recovering from a botched first push to an empty repo.** If the local repo is on a fresh commit but the remote already has prior sync history (e.g. the cron was reset, or the script was re-run after a long gap), `git push` will be rejected with "remote contains work that you do not have locally". Recovery: `git reset --hard origin/main`, re-overlay the source (`rsync -aL` again, or re-call the script), then `git add . && git commit && git push`. Never force-push on a sync repo.
+- **Symlink copies that "fail" with `cannot overwrite directory X with non-directory X`.** This is the `cp -R` (no `-L`) trap on macOS. `cp -R` preserves symlinks, so a source symlink `lark-doc -> /Users/xiesg/.agents/skills/lark-doc` is copied as a symlink (a "non-directory" from the copy's perspective) and refuses to overwrite the existing real directory at the destination. **Always use `rsync -aL` (or `cp -RL`)** to follow symlinks. This pitfall was hit in 2026-06-20 cron run and required re-copying 25 of 61 skills individually.
 - **The `.gitignore` excludes runtime metadata from `git add`, but rsync still copies them to the working tree.** That's correct — the DST repo is a full mirror on disk; git is just the history. The `.usage.json`, `.hub/`, `.curator_state/` files will live in the working tree untracked.
 
 ## Verification

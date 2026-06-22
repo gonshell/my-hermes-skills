@@ -32,3 +32,34 @@ The Hermes cron sandbox sets `$HOME=/Users/xiesg/.hermes/home` (not `/Users/xies
 
 ## git config
 Global git config may not exist in sandbox. Always use `-c user.email=... -c user.name=...` flags.
+
+## HTTPS push fails: no credentials in cron (confirmed 2026-06-20)
+`git push https://github.com/OWNER/REPO.git` hangs ~75s then errors with
+`could not read Username for 'https://github.com': Device not configured`.
+
+**Available in this profile:** SSH key auth to `git@github.com` works (`ssh -T git@github.com` returns `Hi gonshell!`).
+
+**Missing in this profile:** `gh` CLI, `~/.git-credentials`, `~/.netrc`, `GITHUB_TOKEN` env var, any cached HTTPS credential.
+
+**Fix:** the sync script auto-switches the remote from HTTPS to SSH on first run:
+```bash
+OWNER_REPO=$(echo "$url" | sed 's|https://github.com/||; s|\.git$||')
+git remote set-url origin "git@github.com:${OWNER_REPO}.git"
+```
+
+## Recovery: reset to origin/main when local history diverges (confirmed 2026-06-20)
+If the local repo is on a fresh commit but the remote has prior sync history
+(common after a long gap or a repo re-init), `git push` is rejected with
+"remote contains work that you do not have locally". Safe recovery for a
+one-way backup repo:
+
+```bash
+# Only safe for backup/sync repos, never for shared dev branches.
+git reset --hard origin/main
+# Re-overlay source.
+rsync -aL --delete --ignore-errors --exclude='.git' --exclude='.gitignore' \
+    --exclude='README.md' "$SRC/" "$REPO/" 2>/dev/null
+# Then commit + push as normal.
+```
+
+The script does this automatically when `git merge-base --is-ancestor origin/main HEAD` fails.

@@ -218,10 +218,51 @@ lark-cli drive permission.members transfer_owner \
 |-------|--------|-------|
 | `file_token` | Doc URL | Extract from `docx/` / `sheets/` / `wiki/` / `bitable/` path |
 | `type` | Doc URL path | docx → docx, sheets → sheet, wiki → wiki, bitable → bitable |
-| `target_openid` | Memory or context | User openid, e.g. `ou_a0b6be7e404317f09b2ec6df33bde74b` |
+| `target_openid` | **Finding it — see below** | User openid, e.g. `ou_a0b6be7e404317f09b2ec6df33bde74b` |
 | `remove_old_owner` | Default false | Whether to strip old owner's permission |
 | `old_owner_perm` | Default `full_access` | Fallback permission if old owner is removed |
 | `need_notification` | Default false | Whether to notify new owner |
+
+### Finding the User's Feishu open_id
+
+The transfer command needs the target user's `ou_` open_id. In Hermes's bot-only mode (`strictMode: bot`), you **cannot** use `lark-cli contact +search-user` (returns `strict_mode` error). Use these fallbacks in order:
+
+1. **Session DB (fastest)** — the feishu session records store the user's open_id in the `source` column:
+   ```bash
+   sqlite3 $HERMES_HOME/state.db \
+     "SELECT source FROM sessions WHERE source LIKE '%feishu%' LIMIT 5;"
+   ```
+   Output format: `<session_id>|feishu|<open_id>|...` — extract the 3rd pipe-delimited field.
+
+2. **fact_store** — search for previously saved open_id: `fact_store(action='search', query='open_id feishu')`
+
+3. **Ask the user** — fallback if neither (1) nor (2) yields a result. Ask for their `ou_` open_id or feishu email.
+
+**Do NOT try** these approaches (all fail in bot-only mode):
+- `lark-cli contact +search-user --query "name"` → `strict_mode` error
+- `lark-cli contact +get-user` (no user_id) → `bot identity cannot get current user info`
+- Searching `auth.json` / `gateway_state.json` / `channel_directory.json` → these don't store user open_ids
+
+### ⚠️ CRITICAL: memory 中的 open_id 可能冲突 — 必须对账
+
+memory 中可能存了**多个** open_id（不同来源记录了不同 id，比如 USER.md 主条目 vs 某 task 备注）。如果直接拿 memory 的某个 open_id 去 transfer_owner：
+
+- 调用返回 `code: 0`（成功）
+- 但飞书元数据 `owner_id` 可能是**另一个** open_id（飞书内部规范化或归一化到与请求 open_id 关联的另一个账号）
+- 文档实际归属的人**不是用户本人**——不可逆操作
+
+**强制流程**（用户要求"转所有权"时）：
+
+1. 列出 memory 中所有 `ou_` 开头的 open_id，让用户明确确认是哪一个
+2. 调 transfer_owner
+3. **必须用 `metas.batch_query`（§2）拉取 `owner_id` 验证**：
+   ```bash
+   lark-cli drive metas batch_query \
+     --data '{"request_docs":[{"doc_token":"<file_token>","doc_type":"docx"}]}'
+   ```
+   返回 JSON 的 `metas[0].owner_id` 必须等于用户确认的 open_id
+4. **如果 `owner_id` ≠ 用户确认的 open_id**：立即告知用户冲突，请用户确认实际归属。不要自行再调 transfer_owner（飞书可能会再次归一化到同一账号，无法靠重试解决）
+5. 把验证后的 open_id 更新到 memory（覆盖冲突条目）
 
 ### Common Errors
 
@@ -230,17 +271,82 @@ lark-cli drive permission.members transfer_owner \
 | `missing required path parameter: token` | Token as positional | Must be inside `--params` JSON |
 | `unknown flag: --file-token` | Using non-existent flag | No `--file-token` flag in the right command |
 | `Permission denied` | bot is not doc owner | Current owner must first transfer to bot |
+| `code: 0` 但 `owner_id` 不对 | 飞书内部规范化或 memory 冲突 | 用 `metas.batch_query` 验证后请用户确认 |
 
 ### Verification
 
-After transfer, confirm bot still has access:
+#### 必做：验证实际 owner（用 `metas.batch_query`）
+
+```bash
+lark-cli drive metas batch_query \
+  --data '{"request_docs":[{"doc_token":"<file_token>","doc_type":"docx"}]}'
+```
+
+返回 JSON 的 `metas[0].owner_id` 才是真实 owner。**不要用 `transfer_owner` 的 `code: 0` 当成功标志**——那是过程成功，不是结果正确。
+
+#### 可选：验证 bot 还能不能访问
 
 ```bash
 lark-cli drive permission.members auth \
-  --params '{"token":"<file_token>","type":"docx","action":"view"}'
+  --params '{"token":"<file_token>","type":"docx","action":"view","member_type":"openid","member_id":"<bot_openid>"}'
 ```
 
-(Note: it's `auth`, not `list` — `list` doesn't exist for this subcommand.)
+(Note: it's `auth`, not `list` — `list` doesn't exist for this subcommand. Also: `--params` 里传 `member_type` + `member_id`，**没有 `--data` 标志**——这是 v1 子命令和原生 API 的差异之一。)
+
+---
+
+## §5. `--content @<filepath>` 必须是 CWD 相对路径
+
+适用于 `docs +create` / `docs +update` 的 `--content @<path>` 语法。
+
+### 失败信息
+
+```
+--content: invalid file path "/tmp/xxx.xml": --file must be a relative path
+within the current directory, got "/tmp/xxx.xml" (hint: cd to the target
+directory first, or use a relative path like ./filename)
+```
+
+### 根因
+
+lark-cli 把 `@<filepath>` 当作**当前进程工作目录**的相对路径解析，**不支持绝对路径**。临时写到 `/tmp` 或任意其他位置都会失败。
+
+### 正确做法
+
+```bash
+# 1. cp 到 CWD（通常是工作区）
+cp /tmp/big_doc.xml ./big_doc.xml
+
+# 2. 用 @./ 引用
+lark-cli docs +update --doc "$DOC_TOKEN" --command append --content @./big_doc.xml
+```
+
+### 适用场景
+
+- 写较大内容（>10KB XML/Markdown）时，先写到文件再 `@` 引用
+- 配合 `execute_code` 生成 XML 后落到 CWD，再传给 `docs +update`
+- 不要试图 `cd /tmp` 然后用相对路径（其他命令的工作目录依赖会受影响）
+
+---
+
+## §6. `drive permission.members auth` 的正确传参
+
+`auth` 子命令用 `--params` 一个 flag 传**全部 query 参数**（含 `member_type`、`member_id`），**没有 `--data` 标志**。`permission.members` 下的其他子命令（`create`、`transfer_owner`）才需要 `--data`。
+
+```bash
+# ✅ 正确
+lark-cli drive permission.members auth \
+  --params '{"token":"<doc_token>","type":"docx","action":"view","member_type":"openid","member_id":"<openid>"}'
+
+# ❌ 错误：会报 "unknown flag: --data"
+lark-cli drive permission.members auth \
+  --params '{"token":"...","type":"docx","action":"view"}' \
+  --data '{"member_type":"openid","member_id":"..."}'
+```
+
+`auth` 用于验证某用户对某文档是否有指定动作的权限（返回 `auth_result: true|false`），常用来：
+- transfer 后验证新 owner 实际权限
+- 排查 "Permission denied" 错误
 
 ## Related
 

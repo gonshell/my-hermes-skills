@@ -1,6 +1,6 @@
 ---
 name: bilibili-ai-trending-pitfalls-2026-06-20
-description: 2026-06-20 晚间档实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤。
+description: 2026-06-20 起多 session 实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤 / `豆包` 假阳性（字节 AI vs 食物/昵称/游戏角色）/ tier-1+tier-2 双层关键词架构。
 ---
 
 # bilibili-ai-trending — 2026-06-20 实测增量
@@ -147,3 +147,81 @@ if title.lower().startswith('ai ') or 'ai女生' in title.lower() or 'ai男友' 
 - 2 个 `degrade_code=4007` warnings：`Unsupported tag <docx> was escaped` + `Unsupported tag <body> was escaped`
 
 **结论**：warning 是非致命的，**目录正常生成**，内部 h1/h2/ol/li/a 全部正常渲染。优先用 DocxXML 包装（warning 更少），如果 cron prompt 强制要求自定义根节点也可以接受（仅多 2 个 warning）。
+
+## 8. `豆包` 假阳性：字节豆包 vs 食物/人名/游戏角色（2026-06-22 实测）
+
+字节跳动的 AI 助手叫 `豆包`（Doubao），与日常用语"豆包"（食物/小孩昵称/游戏角色）**完全同名**。单纯正则匹配 `豆包` 会引入大量非 AI 内容。
+
+**踩坑（2026-06-22 session）**：候选池 1043 条里抓到 4 条假阳性 TOP-榜内容：
+
+| 被误抓的标题 | 真实身份 |
+|--------------|---------|
+| `当豆包进入到了MC当中，并且还可以指挥豆包！如何生存呢？` | Minecraft 游戏实况，豆包是小孩昵称 |
+| `【人森】傲娇粪跟豆包有机会？` | 生活模拟游戏 `人森` 的角色对话 |
+| `小豆包` / `继续欺负小豆包` / `反骨小豆包` | 萌娃日常（生活记录/亲子分类） |
+| `豆包决定随机金额吃一天！豆包是会配餐的` | 美食测评，外卖挑战 |
+
+**确认这是 search/all/v2 系统性污染**：`豆包` 在 B 站搜索结果里高频出现为食物/人名；直接当 tier-1 强关键词会污染前 10 榜单。
+
+**正确做法 — 三层防御**：
+
+1. **弱化 `豆包` 为 tier-2**（需要 desc/tags 或其他 tier-1 关键词同时命中才接受）：
+   ```python
+   TIER2_PATTERNS = [
+       r'豆包',  # 字节豆包 / 食物 / 昵称 / 游戏角色 — 必须有其他 AI 证据
+       # ...
+   ]
+   ```
+
+2. **显式黑名单"非 AI 豆包"语境词**：
+   ```python
+   BLACKLIST = [
+       r'小豆包',           # 萌娃昵称
+       r'豆包姐姐',         # 益智动画
+       r'进入MC', r'进入我的世界', r'进入《我的世界',  # Minecraft
+       r'傲娇粪', r'人森',  # 豆包 in 模拟游戏 `人森`
+       # ...Adobe Illustrator, 远嫁, 受虐, 非洲, ai女生 等保留
+   ]
+   ```
+
+3. **黑名单 + tier-1 共现检验**：如果 title 含 `豆包` 但同时含 `ChatGPT` / `AI编程` / `AI视频制作` 等 tier-1，仍接受。
+
+**结论**：把 `豆包` 当强关键词会污染 TOP 榜；弱化为 tier-2 + 显式黑名单 + 共现检验才能稳定。同类风险适用于 `Kimi`（少见歧义，但韩国姓氏/动漫角色）、`Claude`（罕见歧义，人名），主要踩坑点在 `豆包`。
+
+## 9. tier-1 / tier-2 双层关键词架构（2026-06-22 沉淀）
+
+基于 2026-06-22 实测收敛的过滤模型，**比单层 strong/weak 更稳定**：
+
+**Tier 1（title 单独命中即 AI）**：
+- 品牌/产品：`ChatGPT` / `DeepSeek` / `Claude` / `Gemini` / `Grok` / `OpenAI` / `Cursor` / `Copilot` / `Trae` / `Dify` / `Coze` / `扣子` / `Manus` / `Midjourney` / `Stable Diffusion` / `ComfyUI` / `Sora` / `Vidu` / `Pika` / `Runway` / `Suno` / `可灵` / `即梦` / `Hailuo` / `Seedance` / `Seedream` / `LoRA`
+- 中文 AI 概念：`人工智能` / `大模型` / `大语言模型` / `机器学习` / `深度学习` / `神经网络` / `LLM` / `RAG` / `智能体` / `AIGC` / `AGI` / `提示词` / `Embedding` / `Transformer` / `文生视频` / `图生视频` / `具身智能` / `强化学习`
+- AI 复合词：`AI编程` / `AI画图` / `AI绘画` / `AI工具` / `AI视频` / `AI生成` / `AI教程` / `AI Agent` / `AI数字人`
+
+**Tier 2（需二次证据）**：
+- 高歧义单 token：`\bAI\b` / `GPT` / `豆包` / `Prompt` / `Agent` / `数字人` / `LoRA` / `Diffusion` / `大模型` / `智能`
+- 二次证据条件（任一）：
+  1. desc/tags 命中任意 Tier-1 关键词
+  2. title 同时命中 ≥ 1 个 Tier-1 关键词
+  3. title 长度 > 15 且含 ≥ 2 个 tech 上下文词（GPT/LLM/模型/智能/学习/训练/生成/推理/工具/画图/绘画/编程/视频/教程/测评/实测/开源/Agent/智能体/代码/提示词/Prompt/机器人/Sora/DeepSeek/Claude/Gemini/Copilot/Cursor/Trae/Kimi/Qwen/豆包/Dify/Manus/ComfyUI）
+
+**效果（2026-06-22）**：候选 1043 → 过滤后 729 真正 AI 视频，TOP 榜肉眼检查无假阳性。
+
+**重要**：黑名单必须**先于**关键词检查：
+```python
+def is_ai_title(title, desc, tags):
+    text = f"{title} {desc} {tags}"
+    # 1) blacklist 先
+    for p in blacklist_compiled:
+        if p.search(text): return False
+    # 2) tier-1
+    for p in tier1_compiled:
+        if p.search(title): return True
+    # 3) tier-2 + secondary
+    for p in tier2_compiled:
+        if p.search(title):
+            if tier1_evidence_in_desc_or_tags(desc, tags): return True
+            if tier1_in_title(title): return True
+            if len(title) > 15 and tech_ctx_count(title) >= 2: return True
+            break
+    return False
+```

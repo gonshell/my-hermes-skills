@@ -29,7 +29,7 @@ metadata:
 - **并行搜索策略**（2026-06-16 实测高效）：使用 `delegate_task` 派出 3 个并行子 agent，分别搜索不同关键词组合（如 "AI ChatGPT Claude GPT LLM"、"artificial intelligence machine learning 2026"、"AI tools agent news"），各自用 `sp=CAMSBAgEEAE%3D` 过滤本周上传，合并去重后按播放量排序。比单 agent 串行搜索快 3-5 倍。
 - **YouTube 不可达时（HTTP 000）走 `references/youtube-unreachable-fallback.md`**：Bing 视频搜索 + B站 `/view` API 是首选方案。早间档 06:00 CST **不要**用 B站 search API `order=pubdate` 补"当日新发"——会被 0-view 灌水（ETC 设备/世界杯预测/"ai真好玩"）淹没。**晚间档 20:00 CST 可以用 B站 search API**（AI 早报生态已发完），但要走 4 维质量过滤（view ≥ 5、title len ≥ 4、owner len ≥ 2、AI 关键词必须匹配）剔除 0-view 灌水。详见该文件"06:00 CST 早间档垃圾坑" + "20:00 CST 晚间档数据流"小节。
 
-详见 `<references/youtube-ai-trending.md>` + `<references/youtube-ai-trending-filters.md>`（sp 参数速查 + JS 提取代码 + 降级策略）+ `<references/youtube-unreachable-fallback.md>`（YouTube 网络不通时的 Bing + B站降级方案，含 2026-06-20 晚间档实测的 search API 412 节流模式 + 4 维质量过滤配方）
+详见 `<references/youtube-ai-trending.md>` + `<references/youtube-ai-trending-filters.md>`（sp 参数速查 + JS 提取代码 + 降级策略）+ `<references/youtube-unreachable-fallback.md>`（YouTube 网络不通时的 Bing + B站降级方案，含 2026-06-20 晚间档实测的 search API 412 节流模式 + 4 维质量过滤配方 + **2026-06-22 晚间档实测新增：8 query 慢速重试模式 + 晚间档专属黑名单（游戏角色/战队/AI 广告灌水）+ news 凑 8 条接受不凑 10 + `merged_youtube-ai.xml` 文件名约定**）
 
 ### YouTube 内容热度监控 → `youtube-ai-trending-monitor`
 

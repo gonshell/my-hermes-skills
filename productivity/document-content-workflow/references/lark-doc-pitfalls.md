@@ -97,3 +97,42 @@ $\pi 弧度 = 180°$
 match = re.search(r'<h2[^>]*id="([^"]+)"[^>]*>01 产品概述</h2>', content)
 block_id = match.group(1)
 ```
+
+## 文档所有权转移（transfer_owner）的 3 个实战坑
+
+**坑 A：bot 身份 + strict mode 下禁止切到 user**（2026-06-21 实测）
+
+在 Hermes 默认配置下，`lark-cli auth login` 会被 `strict mode=bot` 拦截（`error: "strict mode is bot, only bot identity is allowed"`），AI agent 只能以 bot 身份操作。**这意味着 bot 创建的飞书文档默认归 bot 所有，不是当前 user。**
+
+**应对**：
+- bot 创建文档后，CLI 仍会尝试给"当前 CLI user"授可管理权限——但 **user 未登录时 status=skipped**
+- 必须主动调 `drive permission.members transfer_owner` API，把 owner 转给 user
+- 不要假设"用 user 身份登录就能解决"——strict mode 是硬约束
+
+**坑 B：`--content @<filepath>` 必须 CWD 相对路径（同样适用于 transfer）**
+
+`drive permission.members transfer_owner` 调用虽然不直接传文件，但**所有 lark-cli 操作的工作目录假设都是当前 shell 的 CWD**。如果调用前后切换了目录，传参可能错乱。**保持 CWD 稳定**。
+
+**坑 C：transfer_owner API 返回 code:0 ≠ 实际 owner 就是传入的 open_id（关键）**
+
+**真实失败路径（2026-06-21 宇通客车文档案例）**：
+- 用户选定的 open_id 是 `ou_bb96cfb0a6902e8c678db9896518939f`（USER.md 主条目）
+- 调用 `transfer_owner` 时传入此 open_id，API 返回 `code: 0 / msg: Success`
+- 但通过 `drive metas batch_query` 验证元数据：实际 `owner_id` 是 `ou_a0b6be7e404317f09b2ec6df33bde74b`（memory 另一条目）
+- 两个 open_id 都被记在 memory 不同位置
+- 两个 open_id 都有 view 权限（`permission.members.auth` 都返回 auth_result: true）
+
+**判别规则（调 transfer_owner 后的强制验证）**：
+1. **必须用 `drive metas batch_query` 验证实际 owner_id**——不要相信 API 返回
+2. 如果实际 owner 与传入不同，**保持现状**（重复 transfer 通常不会改变）
+3. **memory 冲突**：两个 open_id 都指向 user（猜测是 user 的不同身份/应用），让用户确认
+4. 不要再发起 transfer——很可能回到相同状态
+
+**验证命令模板**：
+```bash
+lark-cli --as bot drive metas batch_query \
+  --data '{"request_docs":[{"doc_token":"<doc_id>","doc_type":"docx"}]}'
+# 输出: data.metas[0].owner_id 即为真实 owner
+```
+
+**预防**：在执行 transfer_owner 前，**先问用户"您本人有几个 open_id / 工作生活是否分开"**——比事后排查更高效。

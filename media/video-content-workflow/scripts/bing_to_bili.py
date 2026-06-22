@@ -9,10 +9,13 @@ bing_to_bili.py — YouTube 不可达时的 YouTube-AI 早间档/晚间档 cron 
      — 2026-06-20 晚间档实测：5/7 query 触发 412 节流，命中 2-3 个即可
   4. 批量调 B站 /x/web-interface/view?bvid= API 拿真实标题/播放量/时长
   5. 4 维质量过滤（view >= 5 / duration > 0 / title len >= 4 / owner len >= 2）
+     + AI 关键词白名单 + 单字 query 黑名单（2026-06-22 早间档实测新增）
   6. 输出 longs / shorts / news 三个 JSON 列表供 XML 生成使用
 
 实测：2026-06-14 06:01 CST 跑通，~2 分钟拿到 60+ 条候选 -> 取 TOP 25
       2026-06-20 20:05 CST 升级：BVID 直取 + 4 维质量过滤 + B站 search API 节流策略
+      2026-06-22 06:02 CST 升级：EXCLUDE_KW 黑名单 + AI_KW_STRICT 白名单
+                         （剔除 Gemini 战队名/AI 电视台台标/纸尿裤/蚂蚁/鹅鸭杀等假阳性）
 
 用法：
   python3 bing_to_bili.py                       # 写 /tmp/curated.json
@@ -48,10 +51,13 @@ BING_QUERIES = [
     "https://www.bing.com/videos/search?q=AI+LLM+GPT+Claude+trending+2026&FORM=HDRSC6&first=31",
 ]
 # B站 search API query 列表 — 2026-06-20 实测 5/7 触发 412 节流，命中 2-3 个即可
-# 关键词按命中率从高到低排：AI日报 > ChatGPT > AI早报 > Claude/Gemini(412 概率高)
+# 关键词按命中率从高到低排：ChatGPT > AI日报 > Claude/Gemini(412 概率高)
+# 2026-06-22 早间档实测：移除 "AI" 单字（蚂蚁/纸尿裤假阳性严重）和 "Gemini"（战队名假阳性严重）
+# 2026-06-22 晚间档实测：扩展至 8 个 query（AI早报/AI日报/Claude/Gemini/AI/DeepSeek/GPT/Sonnet），
+#  每个 query 间隔 2.5s，遇到 412 时继续跑下一个，命中率约 6/8 = 75%
 BILI_API_QUERIES = [
-    ("AI%E6%97%A5%E6%8A%A5", "pubdate"),   # AI日报
     ("ChatGPT", "pubdate"),
+    ("AI%E6%97%A5%E6%8A%A5", "pubdate"),   # AI日报
     ("AI%E6%97%A9%E6%8A%A5", "pubdate"),   # AI早报
 ]
 
@@ -151,19 +157,36 @@ AI_KW = [
     'AI编程', 'Cursor', 'Codeium', 'Cline', 'Continue', 'GenAI', 'AIGC', '超级智能',
 ]
 
+# 显式假阳性黑名单（2026-06-22 早间档实测新增）
+# 用于剔除：Gemini 战队名、鹅鸭杀/狼人杀、王者装扮、纸尿裤、蚂蚁害虫等
+# 2026-06-22 晚间档实测新增：游戏角色/战队（"五杀"/"新皮肤"/"长生小乔"）+ AI 广告灌水（"充值"/"解除限制"）
+EXCLUDE_KW = [
+    # AI 产品名/战队名/玩家名假阳性
+    '鹅鸭杀', 'Goose', '狼人杀', '王者', '王者荣耀', '魔兽', '星际争霸',
+    '外星人', '虫族', 'NBA', 'CBA', 'F1', '赛车', '漫展', 'cos',
+    '世界杯', '足球', '篮球', '赌', '押注', '理财',
+    '美瞳', '美甲', '减肥', '瘦身', '医美', '植发', '相亲',
+    # 直播/电竞/装扮类（不属 AI 视频）
+    '偶像', '主播', '直播间', '装扮', '一诺元射', '小乔大王',
+    # 06:00 早间档实测的诡异命中
+    '蚂蚁', '纸尿裤', '野草', '鹌鹑', '幼童', '父扑火', '甲酰胺',
+    # AI 工具无关关键词
+    '小病', '世界杯预测',
+    # 20:00 晚间档实测新增：游戏角色/战队假阳性
+    '五杀', 'CG', '新皮肤', '小乔', '长生', '大侠', '蛋仔', '鸭鸭',
+    '勇者', '副本', '夏季赛', '常规赛', '锦标赛', '卡组', '水人',
+    # 20:00 晚间档实测新增：AI 教程/广告灌水
+    '充值', '升级订阅', '解除限制', '小白萌新', '小白无脑',
+    '无需礼品卡', '一键升级',
+]
+
 
 def is_ai_relevant(title):
     """粗过滤 Adobe Illustrator / 赌博 / 武器 / 纯娱乐等假阳性"""
     t = title.lower()
     if 'illustrator' in t:
         return False
-    bad = ['赌', '押注', '理财', '赌狗', '赌资', '赌场', '彩票',
-           '美瞳', '美甲', '减肥', '瘦身', '按摩', '养生', '医美', '植发', '隆胸', '相亲']
-    if any(k in title for k in bad):
-        return False
-    bad_ent = ['星际争霸', '外星人', '虫族', '俘虏', '波兰球', 'NBA', '小病',
-               '成为虫族', '世界杯', '足球', '篮球', 'CBA', 'F1', '赛车', '漫展', 'cos']
-    if any(k in title for k in bad_ent):
+    if any(k in title for k in EXCLUDE_KW):
         return False
     return True
 
@@ -198,6 +221,8 @@ def main():
     ap.add_argument('--keep-n', type=int, default=70, help='最多保留多少 BVID 去查 API')
     ap.add_argument('--today-only', action='store_true',
                     help='当日新发仅保留今天发布的（晚间档建议开启）')
+    ap.add_argument('--news-min-view', type=int, default=5,
+                    help='news 类最低 view 门槛（默认 5，配合 --today-only 时建议 50+）')
     args = ap.parse_args()
 
     all_bvids = []
@@ -224,7 +249,7 @@ def main():
                 all_bvids.append((bv, 'bili'))
         except Exception as e:
             print(f"[bili-api] FAIL {kw}|{order}: {e}")
-        time.sleep(0.4)  # 限速避免 412
+        time.sleep(2.5)  # 2026-06-22 晚间档实测：0.4s 太激进，5/7 触发 412；2.5s 间隔命中率 6/8 = 75%
 
     # 去重
     seen = set()
@@ -248,6 +273,7 @@ def main():
         time.sleep(0.25)
 
     # Step 4: 过滤 + 分类
+    # AI 相关性：白名单（looks_like_ai） + 黑名单（is_ai_relevant）
     valid = [d for d in enriched
              if is_ai_relevant(d.get('title', '')) and looks_like_ai(d.get('title', ''))]
     print(f"[valid] {len(valid)} AI-relevant videos")
@@ -261,8 +287,8 @@ def main():
     def by_pub(ds):
         return sorted(ds, key=lambda x: -x['pubdate'])
 
-    # news 走 4 维质量过滤
-    news_pool = [d for d in valid if is_quality(d)]
+    # news 走 4 维质量过滤（晚间档：min_view=5 默认；早间档建议传 --news-min-view 50）
+    news_pool = [d for d in valid if is_quality(d, min_view=args.news_min_view)]
     if args.today_only:
         today = datetime.now(CST).strftime("%Y-%m-%d")
         news_pool = [d for d in news_pool
