@@ -348,6 +348,37 @@ lark-cli drive permission.members auth \
 - transfer 后验证新 owner 实际权限
 - 排查 "Permission denied" 错误
 
+## §7. `docs +media-insert --file` 必须用相对路径
+
+与 §5 同根：`--file` 解析为**当前进程工作目录的相对路径**，不支持绝对路径。
+
+### 失败信息
+
+```
+unsafe file path: --file must be a relative path within the current directory,
+got "/tmp/cchistory_images/cchistory.png"
+```
+
+### 正确做法
+
+```bash
+# ✅ 先 cd 到图片目录，再用相对路径
+cd /tmp/cchistory_images
+lark-cli docs +media-insert --doc doxcnXXX --file "./cchistory.png"
+
+# 或用子 shell 避免污染工作目录
+(cd /tmp/cchistory_images && lark-cli docs +media-insert --doc doxcnXXX --file "./cchistory.png")
+```
+
+### 与 `--content @<filepath>` 的区别
+
+| 场景 | 标志 | 路径要求 |
+|------|------|---------|
+| 在文档中插入图片/文件 | `--file` | 必须是 CWD 相对路径 |
+| 引用本地 XML/Markdown 文件内容 | `--content @<filepath>` | 必须是 CWD 相对路径 |
+
+两者根因相同（lark-cli 对 `@<filepath>` 和 `--file` 都用 CWD 相对路径解析），但错误信息不同，遇到任一都要想到是路径问题。
+
 ## Related
 
 - `lark-doc` — primary document API
