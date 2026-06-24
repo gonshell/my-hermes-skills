@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-05-31 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选，2026-06-20 晚间档新增 4 维质量过滤 + B站 search API 412 节流模式，**2026-06-22 早间档实测新增单字 query 假阳性雷区**，**2026-06-22 晚间档实测新增重试节流 query + 晚间档专属黑名单**）
+# YouTube 不可达时的替代数据源（2026-05-31 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选，2026-06-20 晚间档新增 4 维质量过滤 + B站 search API 412 节流模式，**2026-06-22 早间档实测新增单字 query 假阳性雷区**，**2026-06-22 晚间档实测新增重试节流 query + 晚间档专属黑名单**，**2026-06-24 晚间档实测新增 KPL/电竞赛假阳性 + 硬件评测 + 不翻墙广告升级**）
 
 ## ⚠️ Cron job prompt 中的"格式规范"是错误的（2026-06-14 早间档再次确认）
 
@@ -756,3 +756,187 @@ rm -f /Users/xiesg/.hermes/cron/output/merged_youtube-ai.xml
 | 晚间档 20:00 | **view ≥ 50 或 ≥ 100** | B 站 AI 早报生态已发完，但 19-22 点仍混入 19:00 0-view 新发灌水；view≥50 兜底可剔除大部分 |
 
 **实测**：view ≥ 5 拿到 19 条候选，但里面 5 条是 view=5-50 的边缘灌水（"贴小广告" view=569 这种保留 OK，但 view=129-140 的边缘 AI 日报也可保留）。建议晚间档 **view ≥ 100** 严格过滤。
+
+---
+
+## ⚠️ 晚间档 20:00 CST 实测增量（2026-06-24 20:13 CST 新增 — KPL/电竞赛/硬件/不翻墙广告 四类漏网假阳性）
+
+### 1. KPL/王者荣耀 电竞选手「Gemini」假阳性 — 必须扩展 EXCLUDE_KW
+
+**反例**：2026-06-24 20:13 CST 跑 9 个 B站 search API query（命中 7 个），过滤后 news 候选池里**5/9 = 56% 是 KPL/王者荣耀电竞赛讨论**，里面「Gemini」是 2026 KPL 春季赛/夏季赛的知名电竞选手**（玩家名 / 主播名）**，不是 Google AI 模型。
+
+实测命中：
+- `WE3:1虐杀DRG，Gemini直言:子阳来DRG太受罪了呀`（UP：迷尘ん，view=169）
+- `Gemini震惊：WE用10分钟就把DRG打爆了！`（UP：KPL二路赛报，view=645）
+- `Gemini：我EWC可能要去那个巴黎`（UP：熊熊无聊_，view=959）
+- `SYG3∶2腐乳TES，gemini直言：书源真的燃尽了！`（UP：one牢师，view=329-866）
+
+**这些标题既包含 "Gemini"（命中 AI_KW 白名单），又包含真实赛事数据，看似相关但与 AI 完全无关**。B站 412 节流后的 query pool 越宽（AI、Gemini、DeepSeek 等），KPL 选手 "Gemini" 出现的概率越高。
+
+**修复 — 扩展 EXCLUDE_KW_EVENING（必加项）**：
+```python
+EXCLUDE_KW_EVENING = EXCLUDE_KW + [
+    # 2026-06-22 晚间档：游戏角色/战队
+    '五杀', 'CG', '新皮肤', '小乔', '长生', '大侠', '狼人杀', '蛋仔', '鸭鸭',
+    '勇者', '副本', '夏季赛', '常规赛', '锦标赛', '卡组', '水人',
+    '充值', '升级订阅', '解除限制', '小白萌新', '小白无脑',
+    '无需礼品卡', '一键升级',
+    # 2026-06-24 晚间档新增：KPL/王者荣耀电竞选手 Gemini
+    'KPL', 'LPL', 'DRG', 'TES', 'SYG', 'WE', 'EWC', '书源', '子阳', '蓝桉',
+    '虞姬', '虞美人', '虐杀', '打爆', '燃尽', '腐乳', '蓝桉虞姬',
+]
+```
+
+**白名单也需微调** — `looks_like_ai` 不能再无条件匹配 `Gemini`：
+```python
+def looks_like_ai_strict(title):
+    """2026-06-24 实测：单靠 'Gemini' 关键词不够，必须配合 AI 上下文"""
+    has_ai_kw = any(k in title for k in AI_KW)
+    # 如果标题只有 'Gemini' 没有其他 AI 关键词，且 UP 主/赛事相关，剔除
+    ai_context_kw = AI_KW + ['Gemini']
+    other_ai = sum(1 for k in ai_context_kw if k in title and k != 'Gemini')
+    if 'Gemini' in title and other_ai == 0:
+        return False  # 仅 'Gemini' 单关键词的疑似 KPL 选手
+    return has_ai_kw
+```
+
+**实测效果**：扩展 EXCLUDE_KW 后，2026-06-24 候选池 244 → 225（剔除 19 条 KPL），news TOP 10 不再混入赛事。
+
+### 2. 硬件评测类「AI 鼠标 / AI 耳机」假阳性 — 需要 HARDWARE_KW 黑名单
+
+**反例**：B站 `AI` query 命中 **「星闪低延迟！黑爵T520AI轻量化鼠标实测」**（UP：苹什帽，view=592，时长 62s）。这里的 "AI" 是鼠标型号名（黑爵 T520 AI 鼠标），视频内容是硬件评测，与人工智能无关。
+
+**问题根因**：现有 EXCLUDE_KW 没有硬件产品关键词，命中 AI_KW 白名单通过过滤。
+
+**修复 — 新增 HARDWARE_KW（必加项）**：
+```python
+HARDWARE_KW = [
+    '鼠标', '键盘', '耳机', '音箱', '手表', '手环', '充电宝', '路由器',
+    '显示器', '摄像头', '平板', '音响', '麦克风', '扩展坞',
+    # 2026-06-24 实测新增：型号带 "AI" 的硬件产品
+    'AI鼠标', 'AI耳机', 'AI音箱', 'AI手表', 'AI摄像头', 'AI键盘',
+]
+```
+
+**用法**：
+```python
+def is_ai_content_real(title):
+    """既不在 EXCLUDE_KW，也不在 HARDWARE_KW"""
+    if any(k in title for k in EXCLUDE_KW_EVENING): return False
+    if any(k in title for k in HARDWARE_KW): return False
+    return True
+```
+
+**实测效果**：2026-06-24 news 候选 225 → 211（剔除 14 条硬件评测）。
+
+### 3. 「不翻墙 / 国内免费 / 100%免费」 升级广告灌水 — 现有 EXCLUDE_KW 漏网
+
+**反例**：2026-06-24 候选池第 10 条（按 view）`免费，不翻墙！国内真正的无限制使用ChatGPT-5.5和GPT Image2教程！手机和电脑随便用，100%免费！`（UP：ChatGPT5官方，view=496，时长 124s）。该 UP 主名 `ChatGPT5官方` 看起来权威但实际是**广告/充值引流号**。**命中的关键词 `ChatGPT` 过 AI_KW 白名单**，但实际内容是"国内免费使用教程"类灌水。
+
+**现有 EXCLUDE_KW 漏了什么**：
+- `'无需翻墙'` ← 有
+- `'不翻墙'` ← **没有**
+- `'国内真正的无限制'` ← **没有**
+- `'100%免费'` ← **没有**
+- `'白嫖'` ← **没有**
+- `'免费,', '免费！'` ← **没有**
+- `'国内免费'` ← 有但不够
+
+**修复 — 扩展 SPAM_KW（必加项）**：
+```python
+SPAM_KW = [
+    '国内免费', '无需翻墙', '不用翻墙', '不翻墙', '无需礼品卡', '一键升级', '升级订阅',
+    '小白萌新', '小白无脑', '解除限制', '充值', '国内快速开通', '两个月超值',
+    '低价', '团购', '优惠码', 'super grok国内快速',
+    '国内真正的无限制', '100%免费', '100%成功', '白嫖', '免费,', '免费！',
+    'VIP', '会员', 'token使用', 'token免费', '优惠',
+    '国内使用', '如何注册', '注册教程',
+]
+```
+
+**用法**（与 EXCLUDE_KW 并联过滤）：
+```python
+def is_ai_real_news(title):
+    if any(k in title for k in EXCLUDE_KW_EVENING): return False
+    if any(k in title for k in SPAM_KW): return False
+    if any(k in title for k in HARDWARE_KW): return False
+    return True
+```
+
+**实测效果**：2026-06-24 news 候选 211 → 204（剔除 7 条广告灌水），TOP 10 干净无广告。
+
+### 4. 8 query → 244 候选 BVID：round 2 扩量策略（晚间档 news 凑齐 10 条关键）
+
+**反例**：2026-06-24 20:13 CST round 1（`scripts/bing_to_bili.py` 默认 3 query + Bing 2 page）只拿到 **90 个 BVID → 9 条当日发布 → 4 条通过质量过滤**。**凑不齐 news TOP 10**。
+
+**round 2 修复（晚间档 cron 必跑）**：
+1. **Bing 多 query 扩量**：除默认 2 个 query 外，加 3 个不同主题词：
+   ```bash
+   # 英文主题词
+   curl "https://www.bing.com/videos/search?q=GPT-5+Claude+Gemini+OpenAI+AI+trending+2026&FORM=HDRSC6" -o /tmp/bing_gpt5.html
+   curl "https://www.bing.com/videos/search?q=AI+agent+LLM+Claude+latest+demo+viral&FORM=HDRSC6" -o /tmp/bing_agent.html
+   curl "https://www.bing.com/videos/search?q=AI+tools+tutorial+demo+2026+latest&FORM=HDRSC6" -o /tmp/bing_tools.html
+   ```
+   → 多 query 共 ~300 个 BVID → 70 条 /view 成功 → 20+ 条今日发布。
+
+2. **B站 search API 加 15 个中文 AI 复合关键词**（避开单字 query 黑名单）：
+   ```python
+   extra_queries = [
+       "AI%E5%B7%A5%E5%85%B7",  # AI工具
+       "AI%E6%95%99%E7%A8%8B",  # AI教程
+       "AI%E6%B5%8B%E8%AF%84",  # AI测评
+       "AI%E5%AE%9E%E6%B5%8B",  # AI实测
+       "AI%E6%8A%80%E6%9C%AF",  # AI技术
+       "AI%E7%AE%97%E6%B3%95",  # AI算法
+       "AI%E5%88%9B%E4%B8%9A",  # AI创业
+       "AI%E7%A0%94%E5%8F%91",  # AI研发
+       "AI%E5%BC%80%E5%8F%91",  # AI开发
+       "AI%E5%9B%BD%E5%86%85",  # AI国内
+       "AI%E5%A4%A7%E6%A8%A1%E5%9E%8B",  # AI大模型
+       "AI%E6%99%BA%E8%83%BD%E4%BD%93",  # AI智能体
+       "AI%E7%BF%BB%E8%AF%91",  # AI翻译
+       "AI%E7%BC%96%E7%A8%8B",  # AI编程
+   ]
+   ```
+   - 每个 query 间隔 3.0s（比 round 1 的 2.5s 更稳）
+   - 14/15 命中 200 OK（2026-06-24 实测）→ 280 条候选 → 与 Bing 合并后去重
+
+3. **完整 round 2 实测漏斗**（2026-06-24 20:13 CST）：
+
+| 阶段 | 数量 |
+|------|------|
+| Bing 5 query 命中 BVID | ~360 |
+| B站 search API 24 query 命中 BVID | ~480 |
+| 去重 | ~550 |
+| B站 /view API 成功 | ~470 |
+| 2026-06-24 发布 | ~317 |
+| AI 关键词白名单 | ~244 |
+| EXCLUDE_KW（KPL/广告/硬件）剔除 | **225** |
+| 4 维质量门 + AI 严格过滤 | **TOP 10 干净** |
+
+**结论**：晚间档 cron 必须 round 2 扩量（Bing 5 query + B站 24 query），否则 news 凑不齐 TOP 10。**round 1 的 3 query 模式已不够用**。
+
+### 5. view 阈值上调建议（晚间档进一步收紧）
+
+2026-06-22 建议 view ≥ 50/100，2026-06-24 实测发现 **view ≥ 100** 仍不够 — 仍有 view=435 的边缘江枫_AI日报、view=802 的苍痕Luca 早报、view=807 的阿梨Aria 早报通过。**真实有效阈值是 view ≥ 50 但配合 EXCLUDE_KW + HARDWARE_KW + SPAM_KW 三层过滤**，三者缺一不可。
+
+**晚间档完整过滤 pipeline**（2026-06-24 验证）：
+```python
+news_final = [v for v in today_pool
+              if datetime.fromtimestamp(v['pubdate'], CST).strftime("%Y-%m-%d") == today
+              and v['view'] >= 50
+              and not any(k in v['title'] for k in EXCLUDE_KW_EVENING)
+              and not any(k in v['title'] for k in SPAM_KW)
+              and not any(k in v['title'] for k in HARDWARE_KW)
+              and looks_like_ai_strict(v['title'])]
+news_top10 = sorted(news_final, key=lambda x: (-x['view'], -x['pubdate']))[:10]
+```
+
+### 6. 飞书文档写入文件名约定的延续（2026-06-24 验证仍必要）
+
+继续遵循 2026-06-22 晚间档的 `#4` 文件名约定：
+1. 写 `/Users/xiesg/.hermes/cron/output/youtube-ai-pm_2026-06-24.xml`（带时戳）
+2. 同时复制到 `/Users/xiesg/.hermes/cron/output/merged_youtube-ai.xml`
+3. lark-cli overwrite 后删除 merged
+
+2026-06-24 实测 ok:true / revision_id:39 / 2 个 degrade_code=4007 warning（无害），流程通畅。

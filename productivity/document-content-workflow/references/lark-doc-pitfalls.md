@@ -41,6 +41,32 @@ cp /tmp/content.xml ./content.xml
 <h1>YouTube AI热门视频</h1>
 ```
 
+## 扩展已有文档的标准流程（2026-06-24 验证）
+
+当用户给一个已有飞书 doc token 并要求"加 N 章"或"补内容"时，按这个流程：
+
+1. **先 `+fetch --scope outline` 确认现状**（不要直接 overwrite）——确认现有章节标题、避免重复、与用户对话过的结构一致
+2. **写新章节到独立文件**（不要 heredoc 一次性灌整个 append）：
+   ```bash
+   # 先写到 /tmp
+   write_file /tmp/feishu_chapter9.xml "<h1>第 9 章 ...</h1>..."
+   # 再 cp 到 CWD（lark-cli 路径要求）
+   cp /tmp/feishu_chapter9.xml ./feishu_chapter9.xml
+   lark-cli docs +update --api-version v2 --doc "<doc_id>" --command append --content @feishu_chapter9.xml
+   ```
+3. **分批 append**（每章一个文件一次 append），不要一次 append 全部——这样如果中途某章失败，已 append 的内容不会丢
+4. **写完再 `+fetch --scope outline` 验证**：确认新增章节标题出现在 outline 中
+5. **大文件 append 经验值**：本会话测试 19KB + 28KB 的两次 append 都成功（合计 47KB 增量），单次 < 50KB XML 应该是安全的
+
+## XML append 与 overwrite 的选型
+
+| 场景 | 命令 | 原因 |
+|---|---|---|
+| 在已有文档尾部追加新章节 | `+update --command append --content @file.xml` | 保留现有内容 |
+| 修改文档中间某段 | `+update --command str_replace` 或 `block_replace` | 精准修改 |
+| 整篇重写 | `+update --command overwrite --doc-format markdown` | 谨慎使用，会清空原内容 |
+| 新建文档 | `+update --command append`（对刚 create 的 doc 也有效） | 第一次内容写入 |
+
 ## 标题修改
 
 **`+update --new-title` 无法修改 UI 标题**（v1 API 写入成功但 fetch 返回 null；v2 API 根本不支持）。

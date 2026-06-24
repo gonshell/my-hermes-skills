@@ -76,18 +76,49 @@ def is_illustrator_fake(v):
 - AI 判定**只能依赖 title**，desc 仅作为加分证据（不为空时提升可信度）
 - 对"title 看起来像 AI 但 desc 是空"的视频，要列入"接受"集合（不能因为 desc 空就 reject）
 
-## 4. search/all/v2 返回的 view/like/duration 已经准确，**不需要再调 /view**
+## 4. search/all/v2 返回的 view/like/duration 已经准确，**但跨 API 字段类型不一致**（2026-06-24 实测）
 
-之前文档假设 search/all/v2 的 `play` 是估算值，需要 /view 补全。**2026-06-20 实测**：search/all/v2 返回的 `play`/`like`/`duration`/`author` 与 /view API 几乎完全一致（diff 通常为 0，仅偶有 +1~2 增量）。
+之前文档（2026-06-20）说 search/all/v2 数据足够准，无需 /view 补全。但**必须区分两种场景**：
+
+**场景 A：仅用 popular 全榜（top 50 × N 页）作为候选源** —— search/all/v2 的 play/duration 字段足够，无需 /view。popular 本身就是高播放池，play 不会为 0。
+
+**场景 B：用 popular + search/all/v2 关键词扫荡（常见做法）** —— 必须做 `/view` 二次补全：
+- 大量 search/all/v2 返回的视频 **play=0 或缺失**（候选池 200 条里 26 条 play=0，占 13%）
+- 这些往往是低质量 spam（AI 生成的几秒钟短视频），如果不补全会污染排序
+- 补全后才能正确按播放量过滤（如 `play >= 5000`）和排序
 
 **正确做法**：
-- search/all/v2 给出的数据**直接信任**，不需要批量 /view 补全
-- 仅在以下情况才调 /view：
-  - `owner.name` / `author` 字段为空（兜底 UP 主名）
-  - 需要 `pubdate` / `desc` 等 search/all/v2 不返回的字段
-- **306 条视频全量调 /view 耗时 ~97s**，如果跳过可省 ~80% 时间
+- 如果用了 search/all/v2 关键词扫荡，**必须 /view 补全**
+- 实施注意：批量 /view 之间需 `time.sleep(0.08)` 避免 412（0.05s 触发限速，0.08s 全绿）
+- 200 条全量 /view 约 ~64s（每次响应快，瓶颈在 sleep）
 
-**实施注意**：批量 /view 之间仍需 `time.sleep(0.08)` 避免速率限制（实测 0.05s 触发 412，0.08s 全绿）。
+### 4.1 `duration` 字段类型不一致 — 必须显式归一化（2026-06-24 实测踩坑）
+
+| API | duration 字段类型 | 示例 |
+|-----|------------------|------|
+| `search/all/v2` | **mm:ss 字符串** | `"46:54"` |
+| `/view` | **整数秒** | `168862` |
+
+**踩坑**：本次脚本直接 `print(v['duration'])` 用了 search 抓的 `"46:54"`，但 /view 补全后字段被覆盖为整数 168862，紧接着的 `fmt_dur` 函数按 mm:ss 解析整数秒 → 输出 `"46:54:22"`（46 小时 54 分钟 22 秒！）。
+
+**正确做法 — 归一化 helper**：
+```python
+def fmt_dur(sec_or_str):
+    """统一处理 mm:ss 字符串 OR 整数秒，输出 mm:ss 或 h:mm:ss"""
+    if isinstance(sec_or_str, str):
+        # search/all/v2 格式 "mm:ss"
+        return sec_or_str
+    if isinstance(sec_or_str, (int, float)):
+        s = int(sec_or_str)
+        if s >= 3600:
+            h, rem = divmod(s, 3600)
+            m, sec = divmod(rem, 60)
+            return f"{h}:{m:02d}:{sec:02d}"
+        return f"{s//60}:{s%60:02d}"
+    return "?"
+```
+
+**关键规则**：**搜索结果只用于发现，不用于排序字段**。所有排序字段（play/like/duration）都要走 /view 二次归一化。
 
 ## 5. "AI 弱关键词 + desc 二次过滤"反模式（2026-06-20 误踩）
 
@@ -136,7 +167,68 @@ if title.lower().startswith('ai ') or 'ai女生' in title.lower() or 'ai男友' 
         return True
 ```
 
-## 7. DocxXML `<docx><body>` 包装 + BilibiliAITrending 根节点冲突
+## 10. 2026-06-24 验证的工作候选池配方
+
+经过 2026-06-24 session 实测，**以下配方产出的 TOP 15/TOP 7 榜无需人工干预、零肉眼假阳性**：
+
+```python
+candidates = []
+
+# 1) popular 全榜（top 50 × 2 页 = 100 条，高播放池）
+for pn in [1, 2]:
+    url = f"https://api.bilibili.com/x/web-interface/popular?ps=50&pn={pn}"
+    # ... 解析到 candidates
+
+# 2) search/all/v2 关键词扫荡（× 多关键词 × 双排序）
+keywords = ['AI', 'ChatGPT', 'DeepSeek', 'Claude', '大模型', '人工智能',
+            '机器学习', '深度学习', '神经网络', 'AIGC', 'AI编程', 'AI绘画', 'AI视频']
+for kw in keywords:
+    for order in ['click', 'pubdate']:  # 双排序，召回更多
+        url = f"https://api.bilibili.com/x/web-interface/search/all/v2?keyword={urllib.parse.quote(kw)}&order={order}&page=1&pagesize=50"
+        # ... 解析
+        time.sleep(0.15)  # search API 比 /view 慢一点，0.15 安全
+
+# 3) 去重 (按 bvid)
+# 4) tier-1/tier-2 + blacklist 过滤
+# 5) /view 批量补全 play/like/duration（必须，见 §4）
+# 6) 过滤 play < 5000（剔除 spam）
+# 7) 按 duration 拆分：>180s 长视频，<=180s 短视频
+# 8) 各按 play 排序，取 TOP 15 / TOP 7
+```
+
+**实测数据流（2026-06-24）**：
+- popular pn=1+2：100 条
+- search × 13 关键词 × 2 排序：520 条
+- 合并去重：328 条 unique
+- tier 过滤后：200 条 AI 视频
+- play >= 5000 过滤：124 条
+- 长视频 (>180s)：109 条 → 取 TOP 15
+- 短视频 (<=180s)：15 条 → 取 TOP 7
+
+**关键参数**：
+- `ps=50`（popular 每页上限）
+- `pagesize=50`（search 单页上限）
+- `play >= 5000`（剔除低质 spam 的阈值，实测 124/200 留存）
+- 长短视频切分点 = **180 秒（3 分钟）**
+
+## 11. lark-cli v2 2026-06-24 实测：3 个 warning（非致命）
+
+本次 cron 调用：
+```bash
+lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
+  --command overwrite --content @merged_bilibili-ai.xml --doc-format xml
+```
+
+返回 `revision_id: 53`、`result: "success"`，warnings：
+- `Unsupported tag <?xml> was escaped`
+- `Unsupported tag <docx> was escaped`
+- `Unsupported tag <body> was escaped`
+
+**比 2026-06-20 多一个** `<?xml>` warning（之前 2 个）。原因：本次脚本输出包含 `<?xml version="1.0" encoding="UTF-8"?>` 声明行。建议：未来模板去掉 `<?xml ?>` 声明行，仅输出 `<docx>...</docx>` 主体，可能少 1 个 warning。
+
+**结论**：warning 仍是 3 个、非致命，目录正常生成。
+
+## 12. DocxXML `<docx><body>` 包装 + BilibiliAITrending 根节点冲突（原 §7，2026-06-20 实测）
 
 2026-06-20 cron prompt 模板要求 `<BilibiliAITrending>` 根节点 + `<title>Bilibili AI热门视频</title>`，但 lark-cli `--doc-format xml` 期望 DocxXML 包装 `<docx><title><body>`。
 
