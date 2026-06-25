@@ -194,6 +194,12 @@ See also `references/cron-env-quirks.md` for known cron/sandbox environment beha
 - **Empty commits are fine to skip** — wrap the commit in `|| echo "Nothing to commit"` so the cron doesn't fail when there are no changes.
 - **The sandbox `$HOME` gotcha** (see Path resolution above) bites every fresh cron invocation. Detect via `echo $HOME` before any `cd ~`. In this profile `$HOME=/Users/xiesg/.hermes/home` so `~` resolves to a non-existent `github/` subdir.
 - **Never `git push --force`** — this is a backup repo. Force pushes destroy history other machines may have pushed.
+
+### Symlink sync issues
+If the GitHub repo has broken symlinks instead of real files, see `references/symlink-sync-issue.md` for diagnosis and fix.
+
+### Skill directory organization
+When moving skills to subdirectories, see `references/skill-directory-organization.md` for impact assessment.
 - **HTTPS push needs credentials; SSH doesn't.** In this user's setup (sandbox/cron), there is no `gh` CLI, no `~/.netrc`, no `~/.git-credentials`, no `GITHUB_TOKEN` env var. `git push https://github.com/...` will hang ~75s then fail with `could not read Username: Device not configured`. **Always use SSH remote** (`git@github.com:OWNER/REPO.git`) for both fetch and push. If the repo's remote is HTTPS on first run, switch it: `git remote set-url origin git@github.com:OWNER/REPO.git`. Verify auth with `ssh -T git@github.com` (which prints `Hi OWNER!` on success).
 - **Recovering from a botched first push to an empty repo.** If the local repo is on a fresh commit but the remote already has prior sync history (e.g. the cron was reset, or the script was re-run after a long gap), `git push` will be rejected with "remote contains work that you do not have locally". Recovery: `git reset --hard origin/main`, re-overlay the source (`rsync -aL` again, or re-call the script), then `git add . && git commit && git push`. Never force-push on a sync repo.
 - **Symlink copies that "fail" with `cannot overwrite directory X with non-directory X`.** This is the `cp -R` (no `-L`) trap on macOS. `cp -R` preserves symlinks, so a source symlink `lark-doc -> /Users/xiesg/.agents/skills/lark-doc` is copied as a symlink (a "non-directory" from the copy's perspective) and refuses to overwrite the existing real directory at the destination. **Always use `rsync -aL` (or `cp -RL`)** to follow symlinks. This pitfall was hit in 2026-06-20 cron run and required re-copying 25 of 61 skills individually.
