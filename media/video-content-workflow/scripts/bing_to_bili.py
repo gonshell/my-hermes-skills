@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-"""bing_to_bili.py — YouTube 不可达时的 YouTube-AI 早间档/晚间档 cron 数据获取脚本
+bing_to_bili.py - YouTube 不可达时的 YouTube-AI 早间档/晚间档 cron 数据获取脚本
 
 当 YouTube 返回 HTTP 000 时，用这个脚本：
   1. curl Bing 视频搜索 1-2 个 query
