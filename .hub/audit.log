@@ -1,0 +1,5 @@
+2026-04-17T13:50:38Z INSTALL agentmail official:builtin dangerous sha256:0fa8c58e3e7d9a0c
+2026-04-21T13:54:15Z BLOCKED baoyu-youtube-transcript skills.sh:community caution 3_findings
+2026-04-24T13:53:40Z BLOCKED agent-browser skills.sh:community caution 1_findings
+2026-04-24T14:50:41Z INSTALL frontend-design skills.sh:trusted caution sha256:dc9384b7afb45840
+2026-04-24T15:05:59Z INSTALL superpowers clawhub:community safe sha256:d8033f851c1e4b2f

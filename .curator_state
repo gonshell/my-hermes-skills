@@ -1,0 +1,9 @@
+{
+  "last_report_path": "/Users/xiesg/.hermes/logs/curator/20260627-092739",
+  "last_run_at": "2026-06-27T09:27:39.715163+00:00",
+  "last_run_duration_seconds": 4.627749,
+  "last_run_summary": "auto: no changes; llm: skipped (consolidation off)",
+  "last_run_summary_shown_at": "2026-06-20T02:41:19.816439+00:00",
+  "paused": false,
+  "run_count": 7
+}
