@@ -1,4 +1,4 @@
-# YouTube 不可达时的替代数据源（2026-05-31 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选，2026-06-20 晚间档新增 4 维质量过滤 + B站 search API 412 节流模式，**2026-06-22 早间档实测新增单字 query 假阳性雷区**，**2026-06-22 晚间档实测新增重试节流 query + 晚间档专属黑名单**，**2026-06-24 晚间档实测新增 KPL/电竞赛假阳性 + 硬件评测 + 不翻墙广告升级**）
+# YouTube 不可达时的替代数据源（2026-05-31 实测，2026-06-09 修正，2026-06-10 更新，2026-06-11 晚间档修正关键词与展开按钮，2026-06-12 早间档修正 Bing 关键词实际差异，2026-06-13 早间档修正 06:00 CST 早报空窗，2026-06-14 早间档新增 curl-first 提取方案，2026-06-16 晚间档修正 aria-label 语言依赖 → BVID 直取首选，2026-06-20 晚间档新增 4 维质量过滤 + B站 search API 412 节流模式，**2026-06-22 早间档实测新增单字 query 假阳性雷区**，**2026-06-22 晚间档实测新增重试节流 query + 晚间档专属黑名单**，**2026-06-24 晚间档实测新增 KPL/电竞赛假阳性 + 硬件评测 + 不翻墙广告升级**，**2026-06-29 晚间档实测新增 `--today-only` 过窄修复 + 扩展池定型（today+yesterday, view≥50）**）
 
 ## ⚠️ Cron job prompt 中的"格式规范"是错误的（2026-06-14 早间档再次确认）
 
@@ -940,3 +940,181 @@ news_top10 = sorted(news_final, key=lambda x: (-x['view'], -x['pubdate']))[:10]
 3. lark-cli overwrite 后删除 merged
 
 2026-06-24 实测 ok:true / revision_id:39 / 2 个 degrade_code=4007 warning（无害），流程通畅。
+
+---
+
+## ⚠️ 晚间档 20:00 CST 实测增量（2026-06-29 20:07 CST 新增 — `--today-only` 过窄 + 扩展池定型）
+
+### 1. `--today-only` 在晚间档过窄，新闻池坍缩到 2 条
+
+**反例**：2026-06-29 20:07 CST 跑 `scripts/bing_to_bili.py --round-2 --today-only`，最终输出 `[news] today's only: 2 videos`。原因是 B 站 search API `order=pubdate` 返回的"今天发布"内容很多其实是 18:00-23:59 之间上传、距今仅 1-4 小时的视频，**这些视频播放量还在爬坡（往往 100-1000 之间），过 4 维质量门后只剩 2 条**。
+
+**问题诊断**：当日 19:00-20:00 之间上传播放量还在涨（upload 6h → view 通常 50-500），news 池塌缩。
+
+**修复 — round 2 后追加"今天 + 昨天"扩展池（晚间档 cron 必跑）**：
+
+```python
+# bing_to_bili.py 输出 news 只有 2 条时，跑下面的扩展（一次性内联脚本即可）
+import json, urllib.parse, urllib.request, time
+from datetime import datetime, timezone, timedelta
+
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+CST = timezone(timedelta(hours=8))
+
+# 复用 round 2 已用的 14 个中文复合 query（避开单字 query 黑名单）
+extra_queries = [
+    "AI%E5%A4%A7%E6%A8%A1%E5%9E%8B", "AI%E6%B5%8B%E8%AF%84", "AI%E5%AE%9E%E6%B5%8B",
+    "AI%E7%AE%97%E6%B3%95", "AI%E5%88%9B%E4%B8%9A", "AI%E5%BC%80%E5%8F%91",
+    "AI%E7%BF%BB%E8%AF%91", "ChatGPT",
+    "AI%E6%99%BA%E8%83%BD%E4%BD%93", "AI%E5%B7%A5%E5%85%B7", "AI%E6%8A%80%E6%9C%AF",
+    "AI%E7%A0%94%E5%8F%91", "AI%E5%9B%BD%E5%86%85", "AI%E7%BC%96%E7%A8%8B",
+]
+
+# 重试被 412 节流的 query —— 2.5s 间隔，遇到 412 跳过到下一个
+all_bvs, fetched = set(), []
+for q in extra_queries:
+    time.sleep(2.5)
+    try:
+        url = f"https://api.bilibili.com/x/web-interface/search/type?keyword={q}&search_type=video&order=pubdate&page=1&page_size=20"
+        req = urllib.request.Request(url, headers={'User-Agent': UA, 'Referer': 'https://search.bilibili.com/', 'Accept-Encoding': 'identity'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read()).get('data', {}).get('result', []) or []
+        for v in data:
+            bv = v.get('bvid')
+            if bv and bv not in all_bvs:
+                all_bvs.add(bv)
+    except urllib.error.HTTPError as e:
+        if e.code == 412: continue
+        else: continue
+
+# 批量 /view API（0.3s sleep）
+for bv in all_bvs:
+    time.sleep(0.3)
+    try:
+        req = urllib.request.Request(
+            f"https://api.bilibili.com/x/web-interface/view?bvid={bv}",
+            headers={'User-Agent': UA, 'Referer': 'https://www.bilibili.com/', 'Accept-Encoding': 'identity'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            d = json.loads(r.read()).get('data', {})
+        if d:
+            fetched.append({'bv': bv, 'title': d.get('title',''),
+                           'owner': d.get('owner',{}).get('name',''),
+                           'view': d.get('stat',{}).get('view',0),
+                           'duration': d.get('duration',0),
+                           'pubdate': d.get('pubdate',0)})
+    except: pass
+
+# 时间窗口：今天 + 昨天
+today = datetime.now(CST).strftime("%Y-%m-%d")
+yesterday = (datetime.now(CST) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+# 4 层过滤（EXCLUDE_KW + SPAM_KW + HARDWARE_KW + AI_KW 白名单 + view ≥ 50）
+# EXCLUDE_KW_EVENING / SPAM_KW / HARDWARE_KW / AI_KW —— 复用 2026-06-24 节
+
+def is_ai_real(title):
+    if any(k in title for k in EXCLUDE_KW_EVENING): return False
+    if any(k in title for k in SPAM_KW): return False
+    if any(k in title for k in HARDWARE_KW): return False
+    if 'illustrator' in title.lower(): return False
+    return any(k in title for k in AI_KW)
+
+recent = []
+for d in fetched:
+    pd_str = datetime.fromtimestamp(d['pubdate'], CST).strftime("%Y-%m-%d")
+    if pd_str in (today, yesterday) and d['view'] >= 50 and is_ai_real(d['title']):
+        recent.append(d)
+
+# 去重（按标题前 20 字）+ 排序
+seen = set(); unique_recent = []
+for d in sorted(recent, key=lambda x: (-x['view'], -x['pubdate'])):
+    key = d['title'][:20]
+    if key not in seen:
+        seen.add(key); unique_recent.append(d)
+
+news_top10 = unique_recent[:10]
+```
+
+**2026-06-29 实测漏斗**：
+
+| 阶段 | 数量 |
+|------|------|
+| 14 个 round-2 复合 query 重试 | 6 个命中（8 个 412）|
+| 候选 BVID 去重 | 98 |
+| /view API 成功 | 98 |
+| 今天 + 昨天发布 | 39 |
+| 4 层过滤后 | **21** |
+| 去重 + 取 TOP 10 | **10** ✅ |
+
+**结论**：晚间档 cron 在 `bing_to_bili.py --round-2` 之后**必须再跑一次扩展池脚本**，时间窗口从"今天"放宽到"今天 + 昨天"，4 层过滤后从 2 条 → 21 条。**`--today-only` flag 在晚间档已经不够用，应视为过窄默认**。
+
+### 2. News 标题质量二次过滤建议（晚间档补充）
+
+即使过了 4 层过滤（EXCLUDE_KW + SPAM_KW + HARDWARE_KW + AI_KW + view ≥ 50），仍有标题内容过于单薄的视频被收录，例如：
+
+- 「AI将会取代90%的app。」（view=286，时长 5:06，UP 晓舟报告）— 标题完整但内容浅
+- 「离谱！我的设计师被开了，全能AI：一个网站全包了」（view=547，UP 花生工具箱）— 标题像软广
+
+**建议新增质量微过滤**（可选，慎用 — 太严会过滤真实内容）：
+
+```python
+def is_substantive(title, duration):
+    """标题长度 + 时长门槛 — 滤掉太短或标题过浅的视频"""
+    if len(title.strip()) < 8: return False
+    if duration < 60: return False
+    return True
+```
+
+**但要谨慎**：`is_substantive` 太严会误杀真实 AI 日报（部分标题简短但内容扎实）。**默认不开**这层过滤；仅当 news 池 ≥ 15 且前 10 名包含明显低质内容时手动启用。
+
+### 3. 完整晚间档 cron 流程（2026-06-29 定型）
+
+```bash
+# Step 1: round-2 跑 bing_to_bili.py（bing 5 query + bili 24 query）
+python3 ~/.hermes/skills/media/video-content-workflow/scripts/bing_to_bili.py \
+  --out /Users/xiesg/.hermes/cron/output/bing_to_bili.json \
+  --round-2
+
+# Step 2: 检查 news 数量（< 5 跑扩展）
+python3 -c "
+import json
+with open('/Users/xiesg/.hermes/cron/output/bing_to_bili.json') as f:
+    d = json.load(f)
+print(f'round-2 news: {len(d.get(\"news\", []))}')
+"
+
+# Step 3: 若 news < 5，跑扩展池脚本（today + yesterday, view ≥ 50）
+# （直接 inline execute_code 即可，每次 query 不同）
+
+# Step 4: 用 youtube-ai-xml-build.py 生成 XML
+python3 -c "
+import sys, os, json
+sys.path.insert(0, '~/.hermes/skills/media/video-content-workflow/templates')
+from youtube_ai_xml_build import write
+from datetime import datetime, timezone, timedelta
+CST = timezone(timedelta(hours=8))
+with open('/Users/xiesg/.hermes/cron/output/bing_to_bili.json') as f:
+    data = json.load(f)
+today = datetime.now(CST).strftime('%Y-%m-%d')
+write(today, 'pm', long_top10=data['longs'], short_top5=data['shorts'], recent_top10=data['news'])
+"
+
+# Step 5: lark-cli 上传（同名双文件 + 写后删 merged）
+cd /Users/xiesg && lark-cli docs +update --api-version v2 \
+  --doc "HhyMdusqdoVcW9xLyd2c2Yc2nnf" --command overwrite \
+  --content @./.hermes/cron/output/merged_youtube-ai.xml --doc-format xml
+# 写后 rm merged_youtube-ai.xml
+
+# 2026-06-29 实测：ok:true / revision_id:47 / 3 个 warning（2×4007 + 1×1017，全部无害）
+```
+
+### 4. 飞书文档写入 1017 warning 持续无害（2026-06-29 验证）
+
+本次晚间档 cron 写入返回 3 个 warning：
+
+```
+degrade_code=4007: <docx> was escaped (×2)  ← <docx> + <body> 包装标签被 escape
+degrade_code=1017: Duplicate document title was filtered  ← 多个 <title> 标签去重
+```
+
+**实测确认 1017 也是无害的**：lark-cli 自动保留第一个 `<title>` 标签，文档标题正确显示。**判断标准仍是 `ok: true` 即成功**，warning 数量从 2 个（06-24）变 3 个（06-29）不影响内容渲染。详见 SKILL.md 顶层"飞书文档写入" pitfall 1b。

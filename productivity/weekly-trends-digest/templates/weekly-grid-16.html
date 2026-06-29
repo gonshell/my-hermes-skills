@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>魔搭 · 16 格速览 · {{WEEK}}</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161922; --panel-2: #1c1f2a; --border: #232836;
+    --text: #e6e8ee; --muted: #8a92a6;
+    --accent: #ff6a00; --accent-2: #4dabf7;
+    --green: #51cf66; --yellow: #ffd43b; --red: #ff6b6b; --purple: #b197fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.55; font-size: 13.5px;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px; }
+  h1 { margin: 0 0 4px 0; font-size: 22px; }
+  h1 .badge { display: inline-block; background: var(--accent); color: #000;
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .meta span { margin-right: 16px; }
+  .meta b { color: var(--text); }
+  .tldr {
+    background: linear-gradient(135deg, rgba(255,106,0,0.08), rgba(77,171,247,0.05));
+    border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 14px 18px; margin-bottom: 20px;
+    font-size: 13.5px;
+  }
+  .tldr b { color: var(--accent); }
+  .tldr .tldr-line { margin-bottom: 6px; }
+  .tldr .tldr-line:last-child { margin-bottom: 0; }
+  .grid-title {
+    font-size: 13px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 1px; margin: 24px 0 8px 0; font-weight: 600;
+  }
+  .grid-title b { color: var(--text); }
+  .grid {
+    display: grid;
+    grid-template-columns: 110px repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+  .grid .corner { background: transparent; }
+  .grid .col-head, .grid .row-head {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px;
+    font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  .grid .col-head { color: var(--accent-2); }
+  .grid .row-head { color: var(--accent); }
+  .cell {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; padding: 10px 12px;
+    font-size: 12px; min-height: 110px;
+    display: flex; flex-direction: column;
+  }
+  .cell .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px; flex-wrap: wrap; gap: 4px;
+  }
+  .cell .head .name {
+    font-weight: 600; color: var(--text); font-size: 12.5px;
+    word-break: break-word;
+  }
+  .cell .head .name a { color: var(--text); text-decoration: none; }
+  .cell .head .name a:hover { color: var(--accent-2); }
+  .tag {
+    display: inline-block; font-size: 9.5px; font-weight: 600;
+    padding: 1px 5px; border-radius: 3px; flex-shrink: 0; margin-left: 4px;
+  }
+  .tag.hot     { background: rgba(255,107,107,0.15); color: var(--red); }
+  .tag.rising  { background: rgba(81,207,102,0.15);  color: var(--green); }
+  .tag.flat    { background: rgba(138,146,166,0.15); color: var(--muted); }
+  .tag.watch   { background: rgba(255,212,59,0.15);  color: var(--yellow); }
+  .tag.new     { background: rgba(77,171,247,0.15);  color: var(--accent-2); }
+  .tag.excl    { background: rgba(177,151,252,0.15); color: var(--purple); }
+  .tag.hook    { background: rgba(255,106,0,0.15);   color: var(--accent); }
+  .cell .meta { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .cell .meta b { color: var(--text); }
+  .cell .detail { color: var(--text); font-size: 11.5px; line-height: 1.45; margin-top: auto; }
+  .cell .detail .ev { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .cell .detail .ev b { color: var(--accent-2); }
+  .anomaly-block, .hook-block {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px 20px; margin-bottom: 16px;
+  }
+  .anomaly-block { border-left: 3px solid var(--yellow); }
+  .hook-block    { border-left: 3px solid var(--accent); }
+  .anomaly-block h3, .hook-block h3 {
+    margin: 0 0 12px 0; font-size: 14px; color: var(--text);
+  }
+  .anomaly-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .anomaly-item:last-child { border-bottom: none; }
+  .anomaly-item .row {
+    display: grid; grid-template-columns: 60px 1fr; gap: 8px;
+    margin-bottom: 4px; font-size: 12.5px;
+  }
+  .anomaly-item .row .k { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+  .anomaly-item .row .v { color: var(--text); }
+  .anomaly-item .row .v b { color: var(--accent); }
+  .summary {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px 20px; margin-bottom: 16px;
+  }
+  .summary h3 { margin: 0 0 8px 0; font-size: 14px; color: var(--accent-2); }
+  .summary .pair {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;
+  }
+  .summary .pair .col h4 { margin: 0 0 4px 0; font-size: 12.5px; color: var(--text); }
+  .summary .pair .col p { margin: 0; font-size: 12px; color: var(--text); line-height: 1.5; }
+  .summary .pair .col p b { color: var(--accent-2); }
+  .footer { color: var(--muted); font-size: 11.5px; text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .footer code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11.5px; color: var(--accent-2); }
+  @media print {
+    body { background: white; color: black; padding: 12px; }
+    .grid .col-head, .grid .row-head, .cell, .tldr, .anomaly-block, .hook-block, .summary { background: #fafafa; border-color: #ccc; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>魔搭 · 16 格速览 <span class="badge">{{WEEK}}</span></h1>
+    <div class="meta">
+      <span>📅 {{WEEK_LABEL}}</span>
+      <span>🕐 生成:{{GENERATED_AT}}</span>
+      <span>🗂 类型:{{RUN_TYPE}}</span>
+    </div>
+  </header>
+
+  <div class="tldr">
+    <div class="tldr-line">📌 <b>本周焦点</b>:{{TLDR_FOCUS}}</div>
+    <div class="tldr-line">⚠️ <b>本周反常</b>:{{TLDR_ANOMALY}}</div>
+    <div class="tldr-line">🎯 <b>下周重点</b>:{{TLDR_NEXT}}</div>
+  </div>
+
+  <div class="grid-title">▍<b>4 板块 × 4 关注点</b>(16 格 · 每格=方向+证据+推断)</div>
+  <div class="grid">
+    <div class="corner"></div>
+    <div class="col-head">🧠 模型</div>
+    <div class="col-head">📊 数据</div>
+    <div class="col-head">🔧 工具</div>
+    <div class="col-head">📄 论文</div>
+
+    <!-- 新增行 -->
+    <div class="row-head">新增<br><span style="font-size:10px;font-weight:400;">本周新发</span></div>
+    <div class="cell">{{CELL_M_NEW}}</div>
+    <div class="cell">{{CELL_D_NEW}}</div>
+    <div class="cell">{{CELL_T_NEW}}</div>
+    <div class="cell">{{CELL_P_NEW}}</div>
+
+    <!-- 趋势行 -->
+    <div class="row-head">趋势<br><span style="font-size:10px;font-weight:400;">方向+强度</span></div>
+    <div class="cell">{{CELL_M_TREND}}</div>
+    <div class="cell">{{CELL_D_TREND}}</div>
+    <div class="cell">{{CELL_T_TREND}}</div>
+    <div class="cell">{{CELL_P_TREND}}</div>
+
+    <!-- 反常行 -->
+    <div class="row-head">反常<br><span style="font-size:10px;font-weight:400;">常态+差异</span></div>
+    <div class="cell">{{CELL_M_ANOMALY}}</div>
+    <div class="cell">{{CELL_D_ANOMALY}}</div>
+    <div class="cell">{{CELL_T_ANOMALY}}</div>
+    <div class="cell">{{CELL_P_ANOMALY}}</div>
+
+    <!-- 钩子行 -->
+    <div class="row-head">钩子<br><span style="font-size:10px;font-weight:400;">上周→本周</span></div>
+    <div class="cell">{{CELL_M_HOOK}}</div>
+    <div class="cell">{{CELL_D_HOOK}}</div>
+    <div class="cell">{{CELL_T_HOOK}}</div>
+    <div class="cell">{{CELL_P_HOOK}}</div>
+  </div>
+
+  <div class="anomaly-block">
+    <h3>⚠️ 本周反常详细分析</h3>
+    {{ANOMALY_DETAIL}}
+  </div>
+
+  <div class="hook-block">
+    <h3>🪝 本周新产生的钩子(下周跟踪)</h3>
+    {{NEW_HOOKS}}
+  </div>
+
+  <div class="summary">
+    <h3>📐 本周总结 + 下周重点</h3>
+    <div class="pair">
+      <div class="col">
+        <h4>📌 本周学到的 3 件事</h4>
+        {{SUMMARY_LEARNED}}
+      </div>
+      <div class="col">
+        <h4>🎯 下周重点看的 3 件事</h4>
+        {{SUMMARY_NEXT}}
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    归档:飞书文档「{{DOC_TITLE}}」 · 本地:<code>{{LOCAL_PATH}}</code> · 由 weekly-trends-digest skill 生成
+  </div>
+
+</div>
+</body>
+</html>

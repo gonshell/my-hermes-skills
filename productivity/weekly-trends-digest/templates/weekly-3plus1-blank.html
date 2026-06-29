@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>魔搭 · 每周 10 分钟 3+1 速览(空白模板)</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161922; --border: #232836;
+    --text: #e6e8ee; --muted: #8a92a6; --accent: #ff6a00;
+    --accent-2: #4dabf7; --green: #51cf66; --yellow: #ffd43b; --red: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.6; font-size: 14px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+  h1 { margin: 0 0 4px 0; font-size: 22px; }
+  h1 .badge { display: inline-block; background: var(--accent); color: #000;
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .meta span { margin-right: 16px; }
+  .meta input, .meta select {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 3px 8px; font-size: 12px; font-family: inherit;
+  }
+  .meta input[type=date] { width: 130px; }
+  .meta input[type=number] { width: 50px; }
+  .section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 16px 20px; margin-bottom: 16px;
+  }
+  .section.s2 { border-left-color: var(--accent-2); }
+  .section.s3 { border-left-color: var(--yellow); }
+  .section.s4 { border-left-color: var(--muted); }
+  .section h2 {
+    margin: 0 0 4px 0; font-size: 15px; display: flex; align-items: center; gap: 8px;
+  }
+  .section h2 .num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #000; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .section.s2 h2 .num { background: var(--accent-2); }
+  .section.s3 h2 .num { background: var(--yellow); }
+  .section.s4 h2 .num { background: var(--muted); }
+  .section .desc { color: var(--muted); font-size: 12px; margin: 0 0 12px 30px; }
+  .section .prompt { color: var(--text); font-size: 13px; margin: 0 0 8px 30px; font-style: italic; }
+  .fill {
+    width: calc(100% - 30px); min-height: 80px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    color: var(--text); font-family: inherit; font-size: 13px;
+    padding: 8px 12px; margin-left: 30px;
+    resize: vertical;
+  }
+  .fill:focus { outline: none; border-color: var(--accent); background: rgba(255,255,255,0.05); }
+  .helper { margin: 8px 0 0 30px; font-size: 11.5px; color: var(--muted); }
+  .helper b { color: var(--text); }
+  .checklist {
+    list-style: none; padding: 0 0 0 30px; margin: 8px 0 0 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;
+    font-size: 12px; color: var(--muted);
+  }
+  .checklist li::before { content: "\2610 "; color: var(--accent); }
+  .compare {
+    margin: 12px 0; padding: 12px 16px;
+    background: rgba(255,212,59,0.05); border: 1px solid rgba(255,212,59,0.2);
+    border-radius: 4px; margin-left: 30px; margin-right: 30px;
+  }
+  .compare h3 { margin: 0 0 8px 0; font-size: 12px; color: var(--yellow); }
+  .compare-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12.5px; }
+  .compare-row label { color: var(--muted); min-width: 80px; }
+  .compare-row input, .compare-row select {
+    flex: 1; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 3px;
+    padding: 3px 6px; font-size: 12px; font-family: inherit;
+  }
+  .actions { display: flex; gap: 10px; margin: 24px 0 16px 0; }
+  .btn {
+    padding: 8px 18px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+    font-size: 13px; font-family: inherit;
+  }
+  .btn:hover { background: rgba(255,255,255,0.05); }
+  .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { background: #ff8533; }
+  .footer { color: var(--muted); font-size: 11.5px; text-align: center; margin-top: 16px; }
+  .footer a { color: var(--accent-2); text-decoration: none; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: #000; padding: 10px 20px;
+    border-radius: 6px; font-size: 13px; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  @media print {
+    body { background: white; color: black; padding: 12px; }
+    .actions, .toast { display: none; }
+    .section { background: #f5f5f5; border-color: #ccc; page-break-inside: avoid; }
+    .fill { background: white; color: black; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>魔搭 · 每周 10 分钟 3+1 速览 <span class="badge">空白模板</span></h1>
+    <div class="meta">
+      <span>📅 周期:<input type="date" id="weekStart"> ~ <input type="date" id="weekEnd"></span>
+      <span>📊 第 <input type="number" id="weekNum" min="1" max="53"> 周</span>
+      <span>⏱ 目标 10 min</span>
+    </div>
+  </header>
+
+  <div class="section s1">
+    <h2><span class="num">1</span>变化 · 本周谁发了什么新东西</h2>
+    <p class="prompt">问题:本周新发布了什么?(2 分钟)</p>
+    <textarea class="fill" id="q1" placeholder="例:&#10;• Kimi-K2.7-Code(月之暗面,代码 SOTA)&#10;• MiMo-V2.5-Pro-FP4-DFlash(小米,FP4 量化)&#10;• 钉钉系 MCP × 200&#10;• Gemma 4 Family(Google)"></textarea>
+    <div class="helper"><b>怎么填:</b>只列名字 + 一句话定位。3-5 条。少读细节,多记名字。</div>
+    <ul class="checklist">
+      <li>模型:本周新发 ≥ 1 个</li>
+      <li>数据:新任务/新数据集</li>
+      <li>工具:新 MCP / 新 Skills</li>
+      <li>论文:HF Trending Top3</li>
+    </ul>
+  </div>
+
+  <div class="section s2">
+    <h2><span class="num">2</span>趋势 · 什么方向在升温</h2>
+    <p class="prompt">问题:本周什么关键词出现 ≥ 3 次?(3 分钟)</p>
+    <textarea class="fill" id="q2" placeholder="例:&#10;• FP4 量化(出现 4 次:MiMo / Step / HF 论文 ×2)&#10;• Coding Agent(出现 5 次:模型/数据/论文都有)&#10;• 小尺寸推理(VibeThinker-3B 等)"></textarea>
+    <div class="helper"><b>怎么填:</b>只列方向名,后跟证据次数。1-2 个方向。跨 2 个以上维度才算真趋势。</div>
+  </div>
+
+  <div class="section s3">
+    <h2><span class="num">3</span>反常 · 本周有什么意外</h2>
+    <p class="prompt">问题:什么打破了常态?(2 分钟)</p>
+    <textarea class="fill" id="q3" placeholder="例:&#10;• 钉钉 200 个 MCP 一次性注入 — 行业垂直化启动?&#10;• Gemma 4 #1 但社区评分低 — 营销 vs 实际?&#10;• 某模型突然消失 — 需要查证"></textarea>
+    <div class="helper"><b>怎么填:</b>1 件就够。要标"为什么是反常",留个钩子下周跟踪。</div>
+  </div>
+
+  <div class="section s4">
+    <h2><span class="num">+1</span>钩子 · 上周的钩子这周如何</h2>
+    <p class="prompt">问题:上周的"待观察"现在有结论了吗?(3 分钟)</p>
+    <div class="compare">
+      <h3>📋 抄录上周的 3 个空</h3>
+      <div class="compare-row">
+        <label>上周变化</label>
+        <input type="text" id="lastChange" placeholder="复制上周第 1 题">
+      </div>
+      <div class="compare-row">
+        <label>上周趋势</label>
+        <input type="text" id="lastTrend" placeholder="复制上周第 2 题">
+      </div>
+      <div class="compare-row">
+        <label>上周反常</label>
+        <input type="text" id="lastAnomaly" placeholder="复制上周第 3 题">
+      </div>
+    </div>
+    <textarea class="fill" id="q4" placeholder="例:&#10;• 上周"FP4 升温" → 本周:确认,已有 3 厂商跟进(真趋势)&#10;• 上周"Coding Agent 数据集涨" → 本周:持续涨,新出 SWE-bench-extra(方向锁定)&#10;• 上周"钉钉 200 MCP" → 本周:开始有第三方接入文档发布(动作确认)"></textarea>
+    <div class="helper"><b>怎么填:</b>对上周的每一条,标"升温/持平/熄火"三选一 + 一句话证据。</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" onclick="saveTemplate()">💾 保存本周(复制到剪贴板)</button>
+    <button class="btn" onclick="clearAll()">🗑 清空</button>
+    <button class="btn" onclick="window.print()">🖨 打印 / 存 PDF</button>
+  </div>
+
+  <div class="footer">
+    💡 提示:每周一花 10 分钟填完,存档到飞书/Notion 即可。
+    周环比的"钩子"是这个模板最值钱的部分 — 帮你在 4-8 周内识别真趋势 vs 噪音。
+  </div>
+</div>
+
+<div class="toast" id="toast">✅ 已复制到剪贴板</div>
+
+<script>
+function saveTemplate() {
+  const text = [
+    `📅 ${document.getElementById('weekStart').value || '____'} ~ ${document.getElementById('weekEnd').value || '____'} (第 ${document.getElementById('weekNum').value || '__'} 周)`,
+    '',
+    '1. 变化:',
+    document.getElementById('q1').value || '(空)',
+    '',
+    '2. 趋势:',
+    document.getElementById('q2').value || '(空)',
+    '',
+    '3. 反常:',
+    document.getElementById('q3').value || '(空)',
+    '',
+    '+1 钩子(对上周):',
+    document.getElementById('q4').value || '(空)',
+    '',
+    '--- 抄录上周作为下周参考 ---',
+    `上周变化: ${document.getElementById('q1').value}`,
+    `上周趋势: ${document.getElementById('q2').value}`,
+    `上周反常: ${document.getElementById('q3').value}`,
+  ].join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+function clearAll() {
+  ['q1','q2','q3','q4','lastChange','lastTrend','lastAnomaly'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+const today = new Date();
+const day = today.getDay() || 7;
+const monday = new Date(today); monday.setDate(today.getDate() - day + 1);
+const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+document.getElementById('weekStart').value = monday.toISOString().slice(0,10);
+document.getElementById('weekEnd').value = sunday.toISOString().slice(0,10);
+const yearStart = new Date(monday.getFullYear(), 0, 1);
+const weekNum = Math.ceil(((monday - yearStart) / 86400000 + 1) / 7);
+document.getElementById('weekNum').value = weekNum;
+</script>
+</body>
+</html>

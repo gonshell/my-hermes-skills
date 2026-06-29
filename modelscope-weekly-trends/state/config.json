@@ -1,0 +1,33 @@
+{
+  "feishu_doc_id": "DqQ6daptXoSRzKxUvjRcMCasnng",
+  "feishu_doc_url": "https://www.feishu.cn/docx/DqQ6daptXoSRzKxUvjRcMCasnng",
+  "created_at": "2026-06-29T21:56:32.426004",
+  "last_run": {
+    "week": "2026-W26",
+    "type": "full",
+    "at": "2026-06-29T23:34:55.794007",
+    "data_count": 57,
+    "feishu_ok": true,
+    "note": "v1.2 完整跑通 · 纯 Markdown · 4 板块 browser 实测 · 写后验证通过"
+  },
+  "week_runs": [
+    {
+      "week": "2026-W26",
+      "type": "full",
+      "at": "2026-06-29T21:56:32.488963",
+      "note": "v1.1 重建后补跑 · 16格图+文字已推飞书"
+    },
+    {
+      "week": "2026-W26",
+      "type": "full",
+      "at": "2026-06-29T23:12:45.405602",
+      "note": "v1.2 改版 · 纯 Markdown · 端到端验证通过"
+    },
+    {
+      "week": "2026-W26",
+      "type": "full",
+      "at": "2026-06-29T23:34:55.794007",
+      "note": "v1.2 完整跑通 · 纯 Markdown · 4 板块 browser 实测 · 写后验证通过"
+    }
+  ]
+}

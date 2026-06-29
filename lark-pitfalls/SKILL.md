@@ -379,9 +379,167 @@ lark-cli docs +media-insert --doc doxcnXXX --file "./cchistory.png"
 
 两者根因相同（lark-cli 对 `@<filepath>` 和 `--file` 都用 CWD 相对路径解析），但错误信息不同，遇到任一都要想到是路径问题。
 
+## §8. `im +messages-send --image` 必须是 CWD 相对路径
+
+与 §5 (`--content @`) 和 §7 (`docs +media-insert --file`) 同根:`--image` 解析为**当前进程工作目录的相对路径**,不支持绝对路径。
+
+### 失败信息
+
+```
+--image: --file must be a relative path within the current directory,
+got "/Users/.../foo.png" (hint: cd to the target directory first,
+or use a relative path like ./filename)
+```
+
+### 正确做法
+
+```bash
+# ✅ 先 cd 到图片目录,再用相对路径
+cd /path/to/image_dir
+lark-cli im +messages-send --user-id ou_xxx --image ./foo.png
+
+# ✅ 或用子 shell
+(cd /path/to/image_dir && lark-cli im +messages-send --user-id ou_xxx --image ./foo.png)
+```
+
+### 适用场景
+
+- 用 bot/user 身份给用户私发或群发图片(报告截图、模型图、HTML 渲染结果)
+- 配合 `html-to-image-render` 流程:渲染 → 推到飞书
+
+### 与其他相对路径 flag 的统一表
+
+| 命令 | 标志 | 路径要求 |
+|------|------|---------|
+| `docs +create` / `+update` | `--content @` | CWD 相对 |
+| `docs +media-insert` | `--file` | CWD 相对 |
+| `im +messages-send` | `--image` | CWD 相对 |
+| `im +messages-send` | `--file` | CWD 相对 |
+| `im +messages-send` | `--video` | CWD 相对 |
+
+根因相同,任何 `--file` / `--image` / `--content @` 报错"must be a relative path"时,都是同一个修复:cd 后用 `./`。
+
+## §9. `im +messages-send` 图片上传偶发超时 → 重试 1 次通常就过
+
+### 现象
+
+`--image` 路径完全正确,但首次调用:
+
+```
+uploading image: foo.png
+Error: image upload failed: Post "https://open.feishu.cn/open-apis/im/v1/images":
+read tcp 192.168.x.x:xxxxx->220.181.164.102:443: read: operation timed out
+```
+
+### 根因
+
+飞书图床 (`/open-apis/im/v1/images`) 的上传 endpoint 偶发 30s+ 不返回,通常是公网出口到阿里机房的 TCP 链路抖动,不是 lark-cli 的 bug 也不是配额问题。
+
+### 正确做法
+
+**重试 1 次,不要换 base64/不要换命令**。原因:
+- 上传成功后会得到 `image_key`,后续 send 调用走另一条短路径,不会再卡
+- 第二次走同一命令即可
+- 如果重试 2 次仍失败,才是真问题(账号配额、bot 权限、图床服务故障),这时再去查
+
+```bash
+# 第一次失败 → 直接重试
+lark-cli im +messages-send --user-id ou_xxx --image ./foo.png
+# 第二次通常成功,返回 message_id + chat_id
+```
+
+### 不要做
+
+- ❌ 不要把图片 base64 编码内联(飞书 IM 没有 image-base64 这种 msg_type,只会报错)
+- ❌ 不要把图缩到很小再传(超时跟大小无关,1KB 图也会卡)
+- ❌ 不要换身份(`--as user`)——图床 endpoint 是 bot 服务,user/bot 走的不是同一条
+
+### 适用场景
+
+- `im +messages-send --image` 偶发超时
+- 配套 `html-to-image-render` 输出的大图(单文件 500KB-2MB 都在偶发区间内)
+
+## §10. `docs +update --mode append` 静默失败(返回 ok 但内容未写入)
+
+### 现象
+
+```bash
+lark-cli docs +update --doc DqQ6xxx --mode append --markdown "@./content.md"
+```
+
+返回:
+```json
+{"ok": true, "data": {"message": "文档更新成功（append模式）", "mode": "append", "success": true}}
+```
+
+但 `docs +fetch` 后发现**内容长度没有增加**,新增内容不存在于文档中。
+
+### 根因
+
+v1 API 的 append 操作在特定条件下**静默吞掉内容**:
+- 文档刚被 overwrite 后立即 append(锁未释放)
+- 并发 append(同一文档多个 append 队列竞争)
+- v1 API deprecated 但仍在用(v2 行为可能不同)
+
+**无法从返回值判断是否真的写入** — `ok: true` 只表示 HTTP 请求成功,不代表内容持久化。
+
+### 正确做法:写后必读验证
+
+每次 append/overwrite 后,**必须 re-fetch 验证**:
+
+```bash
+# 1. 记录写入前长度
+BEFORE=$(lark-cli docs +fetch --doc "$DOC_ID" 2>/dev/null | python3 -c "import json,sys; print(len(json.loads(sys.stdin.read())['data']['markdown']))")
+
+# 2. 执行 append
+lark-cli docs +update --doc "$DOC_ID" --mode append --markdown "@./content.md"
+
+# 3. re-fetch 验证长度增加
+AFTER=$(lark-cli docs +fetch --doc "$DOC_ID" 2>/dev/null | python3 -c "import json,sys; print(len(json.loads(sys.stdin.read())['data']['markdown']))")
+
+# 4. 如果长度没增加,重试
+if [ "$AFTER" -le "$BEFORE" ]; then
+    echo "⚠️ 长度未增加(${BEFORE}→${AFTER}),重试..."
+    lark-cli docs +update --doc "$DOC_ID" --mode append --markdown "@./content.md"
+fi
+```
+
+### 自动化封装(推荐)
+
+在任何脚本里调用飞书写入时,封装为带验证的函数:
+
+```python
+def append_feishu_with_verify(doc_id: str, md_path: str) -> bool:
+    len_before = fetch_doc_length(doc_id)
+    result = run_lark_cli(["docs", "+update", "--doc", doc_id, "--mode", "append", "--markdown", f"@{md_path}"])
+    if not result.get("ok"):
+        return False
+    len_after = fetch_doc_length(doc_id)
+    if len_after <= len_before:
+        # 重试一次
+        run_lark_cli(["docs", "+update", "--doc", doc_id, "--mode", "append", "--markdown", f"@{md_path}"])
+        len_after2 = fetch_doc_length(doc_id)
+        return len_after2 > len_before
+    return True
+```
+
+### 不要做
+
+- ❌ 不要用 `success: true` 当作"内容已持久化"的标志
+- ❌ 不要假设"返回 ok"就跳过 re-fetch
+- ❌ 不要连续快速 append 多次(间隔 ≥ 2 秒)
+
+### 适用场景
+
+- 任何 `docs +update --mode append` / `--mode overwrite` 调用
+- cron job 自动追加周报/日报到飞书文档
+- 批量追加多个章节到同一文档
+
 ## Related
 
 - `lark-doc` — primary document API
 - `lark-drive` — file/folder management
 - `lark-shared` — auth and scope management
 - `lark-permission` — permission operations
+- `lark-im` — IM message sending (use `--image` with §8/§9 caveats)
+- `html-to-image-render` — render HTML to PNG before pushing via §8/§9

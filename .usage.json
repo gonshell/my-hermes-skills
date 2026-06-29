@@ -237,14 +237,14 @@
     "archived_at": null,
     "created_at": "2026-06-20T13:08:58.048597+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-06-24T13:07:26.020500+00:00",
-    "last_used_at": "2026-06-26T14:02:07.725011+00:00",
-    "last_viewed_at": "2026-06-26T14:02:07.712185+00:00",
-    "patch_count": 5,
+    "last_patched_at": "2026-06-29T13:11:51.390413+00:00",
+    "last_used_at": "2026-06-29T14:01:36.311434+00:00",
+    "last_viewed_at": "2026-06-29T14:01:36.302299+00:00",
+    "patch_count": 11,
     "pinned": false,
     "state": "active",
-    "use_count": 10,
-    "view_count": 10
+    "use_count": 13,
+    "view_count": 13
   },
   "bilibili-trending": {
     "archived_at": null,
@@ -758,13 +758,13 @@
     "created_at": "2026-06-09T15:03:16.141436+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-06-25T14:57:24.476725+00:00",
-    "last_used_at": "2026-06-25T15:01:47.518666+00:00",
-    "last_viewed_at": "2026-06-25T15:01:47.511866+00:00",
+    "last_used_at": "2026-06-29T15:41:46.391848+00:00",
+    "last_viewed_at": "2026-06-29T15:41:46.382790+00:00",
     "patch_count": 37,
     "pinned": false,
     "state": "active",
-    "use_count": 28,
-    "view_count": 28
+    "use_count": 29,
+    "view_count": 29
   },
   "hiclaw": {
     "archived_at": null,
@@ -791,6 +791,19 @@
     "state": "active",
     "use_count": 0,
     "view_count": 0
+  },
+  "html-to-image-render": {
+    "archived_at": null,
+    "created_at": "2026-06-28T16:05:46.370693+00:00",
+    "created_by": "agent",
+    "last_patched_at": "2026-06-28T16:06:17.326294+00:00",
+    "last_used_at": "2026-06-29T13:37:48.732624+00:00",
+    "last_viewed_at": "2026-06-29T13:37:48.729098+00:00",
+    "patch_count": 2,
+    "pinned": false,
+    "state": "active",
+    "use_count": 2,
+    "view_count": 2
   },
   "huggingface-hub": {
     "archived_at": null,
@@ -927,13 +940,13 @@
     "created_at": "2026-05-08T14:32:09.706034+00:00",
     "created_by": null,
     "last_patched_at": null,
-    "last_used_at": "2026-06-27T13:01:41.451407+00:00",
-    "last_viewed_at": "2026-06-27T13:01:41.446781+00:00",
+    "last_used_at": "2026-06-27T22:01:33.904439+00:00",
+    "last_viewed_at": "2026-06-27T22:01:33.896817+00:00",
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 342,
-    "view_count": 342
+    "use_count": 343,
+    "view_count": 343
   },
   "lark-doc-create": {
     "archived_at": null,
@@ -1018,13 +1031,13 @@
     "created_at": "2026-06-24T13:32:26.241100+00:00",
     "created_by": null,
     "last_patched_at": "2026-06-24T13:32:58.801830+00:00",
-    "last_used_at": "2026-06-24T13:32:26.250070+00:00",
-    "last_viewed_at": "2026-06-24T13:32:26.241114+00:00",
+    "last_used_at": "2026-06-29T13:31:56.842714+00:00",
+    "last_viewed_at": "2026-06-29T13:31:56.837170+00:00",
     "patch_count": 1,
     "pinned": false,
     "state": "active",
-    "use_count": 1,
-    "view_count": 1
+    "use_count": 2,
+    "view_count": 2
   },
   "lark-doc-update": {
     "archived_at": null,
@@ -1083,13 +1096,13 @@
     "created_at": "2026-05-08T22:02:40.177604+00:00",
     "created_by": null,
     "last_patched_at": null,
-    "last_used_at": "2026-06-19T16:53:38.275928+00:00",
-    "last_viewed_at": "2026-06-19T16:53:38.270475+00:00",
+    "last_used_at": "2026-06-29T13:17:12.086115+00:00",
+    "last_viewed_at": "2026-06-29T13:17:12.076758+00:00",
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 21,
-    "view_count": 21
+    "use_count": 24,
+    "view_count": 24
   },
   "lark-openapi-explorer": {
     "archived_at": null,
@@ -1108,14 +1121,14 @@
     "archived_at": null,
     "created_at": "2026-06-20T03:00:53.250711+00:00",
     "created_by": null,
-    "last_patched_at": "2026-06-23T14:50:26.855338+00:00",
-    "last_used_at": "2026-06-23T14:50:13.294930+00:00",
-    "last_viewed_at": "2026-06-23T14:50:13.286020+00:00",
-    "patch_count": 3,
+    "last_patched_at": "2026-06-29T15:23:54.868410+00:00",
+    "last_used_at": "2026-06-29T15:23:27.578875+00:00",
+    "last_viewed_at": "2026-06-29T15:23:27.572794+00:00",
+    "patch_count": 5,
     "pinned": false,
     "state": "active",
-    "use_count": 7,
-    "view_count": 7
+    "use_count": 10,
+    "view_count": 10
   },
   "lark-shared": {
     "archived_at": null,
@@ -1259,6 +1272,19 @@
     "state": "active",
     "use_count": 11,
     "view_count": 11
+  },
+  "modelscope-weekly-trends": {
+    "archived_at": null,
+    "created_at": "2026-06-29T14:01:35.603103+00:00",
+    "created_by": null,
+    "last_patched_at": "2026-06-29T15:37:46.043273+00:00",
+    "last_used_at": "2026-06-29T15:26:07.832856+00:00",
+    "last_viewed_at": "2026-06-29T15:26:07.824059+00:00",
+    "patch_count": 14,
+    "pinned": false,
+    "state": "active",
+    "use_count": 2,
+    "view_count": 2
   },
   "nano-pdf": {
     "archived_at": null,
@@ -1694,13 +1720,13 @@
     "created_at": "2026-06-25T13:47:56.403726+00:00",
     "created_by": null,
     "last_patched_at": "2026-06-25T14:24:52.252510+00:00",
-    "last_used_at": "2026-06-25T14:49:28.378953+00:00",
-    "last_viewed_at": "2026-06-25T14:49:28.373586+00:00",
+    "last_used_at": "2026-06-29T15:21:03.636317+00:00",
+    "last_viewed_at": "2026-06-29T15:21:03.626470+00:00",
     "patch_count": 1,
     "pinned": false,
     "state": "active",
-    "use_count": 4,
-    "view_count": 4
+    "use_count": 6,
+    "view_count": 6
   },
   "stock-deep-analysis": {
     "archived_at": null,
@@ -1797,14 +1823,14 @@
     "archived_at": null,
     "created_at": "2026-05-30T03:28:08.567543+00:00",
     "created_by": null,
-    "last_patched_at": "2026-06-24T22:07:36.832259+00:00",
-    "last_used_at": "2026-06-27T14:01:37.944577+00:00",
-    "last_viewed_at": "2026-06-27T14:01:37.941252+00:00",
-    "patch_count": 201,
+    "last_patched_at": "2026-06-29T12:10:32.665476+00:00",
+    "last_used_at": "2026-06-29T12:09:05.056368+00:00",
+    "last_viewed_at": "2026-06-29T12:09:05.046932+00:00",
+    "patch_count": 206,
     "pinned": false,
     "state": "active",
-    "use_count": 352,
-    "view_count": 352
+    "use_count": 363,
+    "view_count": 363
   },
   "wechat-header-generator": {
     "archived_at": null,
@@ -1818,6 +1844,19 @@
     "state": "active",
     "use_count": 1,
     "view_count": 1
+  },
+  "weekly-trends-digest": {
+    "archived_at": null,
+    "created_at": "2026-06-28T16:31:28.177730+00:00",
+    "created_by": "agent",
+    "last_patched_at": "2026-06-29T13:41:05.821412+00:00",
+    "last_used_at": "2026-06-29T13:41:31.725554+00:00",
+    "last_viewed_at": "2026-06-29T13:41:31.716627+00:00",
+    "patch_count": 16,
+    "pinned": false,
+    "state": "active",
+    "use_count": 7,
+    "view_count": 7
   },
   "weibo-api-discovery": {
     "archived_at": null,

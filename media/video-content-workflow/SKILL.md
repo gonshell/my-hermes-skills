@@ -117,6 +117,21 @@ output_path = os.path.join(output_dir, "bilibili-trending.xml")
 
 **结论**：继续使用 `<docx><title>...</title><body>...</body></docx>` 包装（参考下面的 XML 模板），不要为了消除 warning 而改用裸 XML（裸 XML 反而会导致飞书把整个内容当文本）。
 
+### 1b. lark-cli `degrade_code=1017` "Duplicate document title was filtered"（2026-06-29 早间档实测新增）
+
+**症状**：lark-cli overwrite 返回 `ok: true` 但 warnings 里多一条：
+```
+degrade_code=1017, msg=Duplicate document title was filtered: 1 duplicate <title>
+tag was filtered; the first <title> was kept. Keep only one document title; when
+using --title, do not also generate another <title> in content
+```
+
+**含义**：lark-cli 检测到 XML 里有多个 `<title>` 标签，自动保留第一个并丢弃其余。**文档标题仍正确显示**（第一个生效），写入成功。
+
+**触发条件**：当前模板写 `<docx><title>...</title><body>...` 是规范的。如果 XML 末尾不慎多写了一个独立 `<title>...</title>`（在 `</body>` 之外）、或某条 `<a>`/`<h2>` 内部文本恰好匹配了 title 提取规则，都可能触发。
+
+**处理**：不要在 `</body></docx>` 之外再加 `<title>`。如果仍触发 1017，**`ok: true` 即可判定成功**——这是无害的去重行为，不是写入失败。
+
 ### 2. Bilibili 搜索页 DOM 把所有视频标题都遮盖为"稍后再看"
 
 `https://search.bilibili.com/all?keyword=AI&...` 页面里，所有视频卡片的 `<h3>` 标题文本都是 `稍后再看{播放量}{时长}` 格式，真实标题被前端动态注入但抓取时被覆盖。
@@ -187,7 +202,8 @@ YouTube 在国内网络环境下可能完全不可达（curl 返回 0 字节、b
    - 数据包括：标题、来源网站、时长、上传日期、精确播放量（B站 API 提供权威数据，不是 Bing 估算）
    - 适合填充长视频和当日新发类别
    - **XML 模板**：`templates/youtube-ai-xml-build.py`（处理 bing/bilibili 双源 + 排序 + 飞书 DocxXML 包装）
-   - **可重跑脚本**：`scripts/bing_to_bili.py`（curl Bing + curl B站 + B站 /view API → JSON，~2 分钟）
+   - **可重跑脚本**：`scripts/bing_to_bili.py`（curl Bing + curl B站 + B站 /view API → JSON，~2 分钟）→ 输入到 `templates/youtube-ai-xml-build.py`（自动读取 `bing_to_bili.json` 输出并构建 XML）
+- ⚠️ **2026-06-29 早间档实测修正**：`templates/youtube-ai-xml-build.py` 之前要求的 input schema 是 `{title, channel, views, duration, uploaded, src}`（老设计），但 `scripts/bing_to_bili.py` 实际输出 `{title, owner, view, duration, pubdate, bv, source}`。**两个 schema 不兼容**——直接喂老模板会因字段名不匹配（`channel` vs `owner`、`views` vs `view`、`uploaded` vs `pubdate`）导致 `<li>` 渲染异常。老模板的 `bilibili_bvid_map`（标题→BVID 映射）也已废弃——`bing_to_bili.py` 每条都带 `bv` 字段，URL 直接 `https://www.bilibili.com/video/{bv}/` 拼出。**重写后的模板已对齐新 schema 并自带 `fmt_view/fmt_dur/fmt_uploaded` 辅助函数**，可直接 `python3 templates/youtube-ai-xml-build.py` 跑（不传参则用今天日期 + am slot）
 
 2. **Bilibili 搜索页**（推荐，覆盖中文 AI 内容）：
    - URL：`https://search.bilibili.com/all?keyword=AI早报&search_type=video&order=pubdate`

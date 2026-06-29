@@ -5,75 +5,102 @@ Used when YouTube is unreachable (HTTP 000) and we fall back to Bing + Bilibili
 data. Writes both a date-stamped copy and a `merged_youtube-ai.xml` for lark-cli
 upload.
 
-Inputs:
-- long_top10: list[dict] with keys {title, channel, views, duration, uploaded, src}
-  src ∈ {"bing", "bilibili"} — bing items use bing search URL; bilibili items
-  must have a BVID resolvable via bilibili_bvid_map below.
-- short_top5: same shape
-- recent_top10: same shape, ordered newest-first
+Input schema (matches `scripts/bing_to_bili.py` output — every item has `bv`):
+  - long_top10: list[dict]  keys = {title, owner, view, duration, pubdate, bv, source}
+  - short_top5: same shape
+  - recent_top10: same shape, ordered newest-first
+
+All items today come through B站 /view API (Bing HTML → BVID → /view), so every
+dict has a `bv` field and we link directly to https://www.bilibili.com/video/{bv}/.
+No more `bilibili_bvid_map` lookup needed.
 
 Output:
-- /Users/xiesg/.hermes/cron/output/merged_youtube-ai.xml   (for lark-cli upload)
-- /Users/xiesg/.hermes/cron/output/youtube-ai-{am|pm}_{YYYY-MM-DD}.xml   (backup)
+- /Users/xiesg/.hermes/cron/output/merged_youtube-ai.xml               (for lark-cli upload)
+- /Users/xiesg/.hermes/cron/output/youtube-ai-{am|pm}_{YYYY-MM-DD}.xml  (backup)
 
 Then upload with:
     cd /Users/xiesg && lark-cli docs +update --api-version v2 \\
       --doc "$DOC_TOKEN" --command overwrite \\
       --content @./.hermes/cron/output/merged_youtube-ai.xml --doc-format xml
 
-`<docx>/<body>` wrapping tags will trigger a `degrade_code=4007` warning in
-the response — this is harmless. ok:true means write succeeded.
+Warnings to expect (all harmless, content still renders):
+  - degrade_code=4007: <docx> and <body> wrapping tags are unsupported, escaped.
+  - degrade_code=1017: duplicate <title> detected — keep only one (first wins).
+`ok: true` means write succeeded regardless.
 """
+import json
 import os
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 OUT_DIR = "/Users/xiesg/.hermes/cron/output/"
+CST = timezone(timedelta(hours=8))
 
-# 飞书文档 token — 见 SKILL.md “飞书文档写入” 节
-DOC_TOKEN_AM = "EbHDdKARYo4vEExQiNGc3qiGnSe"  # 早间档
-DOC_TOKEN_PM = "HhyMdusqdoVcW9xLyd2c2Yc2nnf"  # 晚间档
-
-# Map bilibili 完整标题 → BVID (looked up via browser_console a[href*="/video/BV"])
-bilibili_bvid_map: dict[str, str] = {
-    # "完整标题": "BVxxx",
-}
+# 飞书文档 token — 见 SKILL.md "飞书文档写入" 节
+DOC_TOKEN_AM="EbHDdKARYo4vEExQiNGc3qiGnSe"  # 早间档
+DOC_TOKEN_PM="HhyMdusqdoVcW9xLyd2c2Yc2nnf"  # 晚间档
 
 
 def escape(s: str) -> str:
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-             .replace('"', "&quot;").replace("—", "-"))
+             .replace('"', "&quot;"))
 
 
-def bing_link(title: str) -> str:
-    return f"https://www.bing.com/videos/search?q={urllib.parse.quote(title)}"
+def fmt_dur(secs) -> str:
+    """seconds -> M:SS or H:MM:SS"""
+    secs = int(secs)
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+def fmt_view(v) -> str:
+    """12345 -> 1.2万, 1234567 -> 123.5万, 12345678 -> 1234.6万"""
+    v = int(v)
+    if v >= 10000:
+        wan = v / 10000
+        if wan >= 10000:
+            return f"{wan/10000:.1f}亿"
+        return f"{wan:.1f}万"
+    return str(v)
+
+
+def fmt_uploaded(pub_ts) -> str:
+    return datetime.fromtimestamp(int(pub_ts), CST).strftime("%m-%d %H:%M")
 
 
 def build_li(v: dict) -> str:
-    title_esc = escape(v["title"])
-    if v.get("src") == "bilibili":
-        bvid = bilibili_bvid_map.get(v["title"])
-        if bvid:
-            href = f"https://www.bilibili.com/video/{bvid}/"
-        else:
-            # Last-resort: bilibili search results page for the title prefix
-            href = (f"https://search.bilibili.com/all?keyword="
-                    f"{urllib.parse.quote(v['title'][:20])}")
+    """Render one <li> from a bing_to_bili.py output dict.
+
+    Every item today has a `bv` field (B站 /view API response); use the canonical
+    B站 URL directly. No more manual title→BVID map.
+    """
+    bv = v.get("bv")
+    if not bv:
+        # Defensive fallback — should never happen with current bing_to_bili.py output
+        encoded = urllib.parse.quote(v.get("title", "")[:20])
+        href = f"https://search.bilibili.com/all?keyword={encoded}"
     else:
-        href = bing_link(v["title"])
-    return (f'<li seq="auto"><a href="{href}">{title_esc}</a> '
-            f'｜频道：{escape(v["channel"])} '
-            f'｜播放：{v["views"]} '
-            f'｜时长：{v["duration"]} '
-            f'｜上传：{v["uploaded"]}</li>')
+        href = f"https://www.bilibili.com/video/{bv}/"
+    return (f'<li seq="auto"><a href="{href}">{escape(v["title"])}</a> '
+            f'｜频道：{escape(v.get("owner", ""))} '
+            f'｜播放：{fmt_view(v.get("view", 0))} '
+            f'｜时长：{fmt_dur(v.get("duration", 0))} '
+            f'｜上传：{fmt_uploaded(v.get("pubdate", 0))}</li>')
 
 
 def build_xml(date: str, slot: str,
               long_top10: list[dict],
               short_top5: list[dict],
-              recent_top10: list[dict]) -> str:
+              recent_top10: list[dict],
+              data_source: str = "Bing 视频搜索 + Bilibili /view API "
+                                 "(YouTube 网络不可达 HTTP 000，走降级方案)") -> str:
     slot_cn = {"am": "早间档", "pm": "晚间档"}[slot]
     lines: list[str] = []
+    # ⚠️ DocxXML wrapper — see SKILL.md "飞书文档写入" pitfall.
+    # <docx> and <body> trigger degrade_code=4007 (harmless); inner tags render fine.
     lines.append(f'<docx><title>YouTube AI热门视频 · {slot_cn}</title><body>')
     lines.append(f'<h1>YouTube AI热门视频 · {date} · {slot_cn}</h1>')
     lines.append('')
@@ -101,10 +128,9 @@ def build_xml(date: str, slot: str,
     lines.append('</ol>')
     lines.append('')
 
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M CST")
+    ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M CST")
     lines.append(f'<text color="gray">⚠️ 数据获取时间：{ts} '
-                 f'| 数据来源：Bing视频搜索 + Bilibili '
-                 f'（YouTube网络不可达 HTTP 000）</text>')
+                 f'| 数据来源：{data_source}</text>')
     lines.append('</body></docx>')
     return "\n".join(lines)
 
@@ -122,12 +148,21 @@ def write(date: str, slot: str, **kwargs) -> tuple[str, str]:
 
 
 if __name__ == "__main__":
-    # Example wiring — replace with real Bing+bilibili data.
-    long_top10: list[dict] = []
-    short_top5: list[dict] = []
-    recent_top10: list[dict] = []
-    merged, dated = write("2026-06-11", "am",
-                          long_top10=long_top10,
-                          short_top5=short_top5,
-                          recent_top10=recent_top10)
-    print(f"wrote: {merged}\nwrote: {dated}")
+    # Example wiring — load real bing_to_bili.json output.
+    DATA_FILE = os.path.join(OUT_DIR, "bing_to_bili.json")
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE) as f:
+            data = json.load(f)
+        # Default to today's date in CST
+        today = datetime.now(CST).strftime("%Y-%m-%d")
+        slot = sys.argv[1] if len(sys.argv) > 1 else "am"
+        merged, dated = write(today, slot,
+                              long_top10=data.get("longs", []),
+                              short_top5=data.get("shorts", []),
+                              recent_top10=data.get("news", []))
+        print(f"wrote: {merged}\nwrote: {dated}")
+    else:
+        # Dry-run example (no real data)
+        merged, dated = write("2026-06-29", "am",
+                              long_top10=[], short_top5=[], recent_top10=[])
+        print(f"wrote (empty): {merged}\nwrote: {dated}")

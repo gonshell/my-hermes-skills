@@ -1,11 +1,13 @@
 ---
 name: bilibili-ai-trending-pitfalls-2026-06-20
-description: 2026-06-20 起多 session 实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤 / `豆包` 假阳性（字节 AI vs 食物/昵称/游戏角色）/ tier-1+tier-2 双层关键词架构。
+description: 2026-06-20 起多 session 实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤 / `豆包` 假阳性（字节 AI vs 食物/昵称/游戏角色）/ tier-1+tier-2 双层关键词架构 / 2026-06-29 search/all/v2 改成 search/type 端点 / 标题 `|tag|tag` 后缀主标题提取 / lark-cli 必须相对路径。
 ---
 
 # bilibili-ai-trending — 2026-06-20 实测增量
 
 > 补充 `bilibili-ai-trending-pitfalls-2026-06-19.md`。
+
+**已知好用的完整脚本**（2026-06-29 cron 实测通过）见 `references/2026-06-29-working-script.py` — 直接复制修改即可使用。
 
 ## 1. execute_code 是全新解释器 — import 不跨调用持久
 
@@ -211,7 +213,233 @@ for kw in keywords:
 - `play >= 5000`（剔除低质 spam 的阈值，实测 124/200 留存）
 - 长短视频切分点 = **180 秒（3 分钟）**
 
-## 11. lark-cli v2 2026-06-24 实测：3 个 warning（非致命）
+### 10.1 ⚠️ 2026-06-29 重大变更：`search/all/v2` 返回结构变了 — 必须改用 `search/type`
+
+**踩坑（2026-06-29 cron）**：原 §10 配方直接用 `search/all/v2?pagesize=50`，但 2026-06-29 实测 `result[]` 已经变成**混合 feed**（`tips` / `brand_ad` / `esports` / `activity` / `web_game` / `card` / `media_bangumi` / `media_ft` / `bili_user` / `user` / `star` / `video` 等 12 种 type 混排），`pagesize=50` 实际只返回 ~12 条混合项，**其中 video 类型只占 1 条**。每页召回从 20+ 视频暴降到 1 视频，候选池从 328 unique 直接降到 100（只剩 popular），AI 过滤后仅 1 条 — 整张榜废了。
+
+**正确做法 — 改用 `x/web-interface/search/type?search_type=video`**：
+
+```python
+for kw in keywords:
+    for order in ['click', 'pubdate']:
+        for page in [1, 2]:  # 多翻几页召回更多
+            url = (
+                f"https://api.bilibili.com/x/web-interface/search/type"
+                f"?search_type=video"
+                f"&keyword={urllib.parse.quote(kw)}"
+                f"&order={order}"
+                f"&page={page}"
+                f"&pagesize=20"
+            )
+            data = curl_json(url)
+            if not data or data.get('code') != 0: continue
+            results = data.get('data', {}).get('result', []) or []
+            for item in results:
+                # search/type 端点的 video 项直接是 video 字典
+                if item.get('type') != 'video': continue
+                bvid = item.get('bvid')
+                if not bvid or bvid in candidates: continue
+                candidates[bvid] = {
+                    'bvid': bvid,
+                    'title': item.get('title', ''),       # 仍带 <em> 标签
+                    'desc': item.get('description', ''),
+                    'author': item.get('author', ''),
+                    'play': item.get('play', 0) or 0,
+                    'like': item.get('like', 0) or 0,
+                    'duration': item.get('duration', '0:00') or '0:00',
+                    'source': 'search',
+                }
+            time.sleep(0.2)
+```
+
+**关键差异（search/all/v2 vs search/type）**：
+
+| 字段 | `search/all/v2` (旧) | `search/type?search_type=video` (新) |
+|------|---------------------|--------------------------------------|
+| 端点 | `x/web-interface/search/all/v2` | `x/web-interface/search/type` |
+| result[] 内容 | 混合 feed（视频+用户+广告+...） | 纯 video 列表 |
+| pagesize=50 实际返回 | ~12 条混合项（视频 1 条） | 20 条 video |
+| video 项 type 字段 | `result_type == 'video'`, 数据在 `data[]` 数组 | `type == 'video'`, 数据就是 item 本身 |
+| video 项 bvid 位置 | `data[0].bvid`（嵌套） | `item.bvid`（直接） |
+| video 项 play 字段 | `data[0].play` | `item.play` |
+| video 项 duration 字段 | `data[0].duration` (mm:ss 字符串) | `item.duration` (mm:ss 字符串) |
+| video 项 desc 字段 | `data[0].description` | `item.description` |
+| pageinfo | 每个分类单独 numResults | 仅顶层 numResults / numPages |
+
+**回归测试**：用 search/type 改写后，2026-06-29 session 数据流恢复正常：
+- popular pn=1+2：100 条
+- search/type × 13 关键词 × 2 排序 × 2 页 = 520 → 去重 617 unique
+- tier 过滤 + play>=5000：90 条
+- 长视频 73 / 短视频 17
+
+**重要：旧的 `search/all/v2` 不能再用**。本 skill 之前所有提到 `all/v2` 的代码（§4、§10、§11）都需要替换为 `search/type?search_type=video`。
+
+## 10.2 B站中文标题 `|tag|tag|tag` 后缀污染 — 主标题提取（2026-06-29 实测）
+
+**新踩坑**：B站创作者在标题末尾用 `|` 拼接一堆关键词做 SEO，例如：
+
+```
+Python入门零基础必看教程，这绝对是今年最全最细的教程，全程干货无废话！python|程序员|python入门||人工智能|python零基础
+```
+
+主标题显然是「Python入门零基础必看教程…」，但 `人工智能` 出现在 `|` 后缀里，**会被 `人工智能` tier-1 关键词误判为 AI 内容**。结果：21M 播放的 Python 入门教程被错误地推上 AI 榜 #1。
+
+**正确做法 — 提取 main title（主标题在第一个 `|` 之前）**：
+
+```python
+def get_main_title(t):
+    if not t: return t
+    if '|' not in t: return t.strip()
+    return t.split('|', 1)[0].strip()
+```
+
+**配套的 tier-1 检查要改用 main title**：
+
+```python
+def is_ai_title_strict(title_raw, desc, tags):
+    main = get_main_title(title_raw)  # ← 关键：用 main 而非完整 title
+    if is_blacklisted(main, desc, tags): return False
+    return any(p.search(main) for p in tier1_compiled)
+```
+
+**配套的过滤参数也要更新**（§10 配方步骤 4 替换为）：
+```python
+# 用 main title 而非 title_clean 做 AI 判定
+ai_videos = [v for v in candidates if is_ai_title_strict(
+    v.get('title_real') or v['title_clean'],
+    v.get('desc', ''),
+    v.get('tags_real', '')
+)]
+```
+
+**回归**：2026-06-29 改用 main title 提取后，21M 播放 Python 教程正确从 #1 降至 #4（被 PyTorch 教程等真正 AI 视频顶替）。TOP 榜肉眼检查无 Python/Matlab 等非 AI 教程污染。
+
+**注意**：search/type 端点返回的 title 也带 `<em class="keyword">` 标签（高亮命中关键词），需 `re.sub(r'<[^>]+>', '', t)` 先剥 HTML。`/view` 返回的 title 是干净的实际标题。**强烈建议先 /view 补全再用 main title 提取**（见 §4）。
+
+## 13. lark-cli `--content @file` 必须用**相对路径**（2026-06-29 实测踩坑）
+
+**踩坑（2026-06-29）**：第一版命令用 `/tmp/merged_bilibili-ai.xml` 绝对路径：
+
+```bash
+lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
+  --command overwrite --content @/tmp/merged_bilibili-ai.xml --doc-format xml
+```
+
+返回错误（exit_code=2, ok=false）：
+```json
+{
+  "ok": false,
+  "identity": "bot",
+  "error": {
+    "type": "validation",
+    "message": "--content: invalid file path \"/tmp/merged_bilibili-ai.xml\": --file must be a relative path within the current directory, got \"/tmp/merged_bilibili-ai.xml\" (hint: cd to the target directory first, or use a relative path like ./filename)"
+  }
+}
+```
+
+**根因**：lark-cli 在某个时间点升级后对 `--content @<path>` 参数新增了**相对路径校验**（防止任意文件读取），绝对路径会被拒绝。
+
+**正确做法 — 三选一**：
+
+1. **方案 A（推荐）**：cd 到目标目录再传相对路径
+   ```bash
+   cd /Users/xiesg
+   lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
+     --command overwrite --content @merged_bilibili-ai.xml --doc-format xml
+   ```
+
+2. **方案 B**：复制 XML 到当前目录后再调用
+   ```bash
+   cp /tmp/merged_bilibili-ai.xml ./merged_bilibili-ai.xml
+   lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
+     --command overwrite --content @merged_bilibili-ai.xml --doc-format xml
+   ```
+
+3. **方案 C**：用 Python `subprocess.run(..., workdir='/Users/xiesg')` 指定工作目录
+   ```python
+   subprocess.run(
+       ['lark-cli', 'docs', '+update', '--api-version', 'v2',
+        '--doc', 'Virbd3YyBoYK9XxqaZOccEGRnio',
+        '--command', 'overwrite',
+        '--content', '@/tmp/merged_bilibili-ai.xml',  # 或 @merged_bilibili-ai.xml
+        '--doc-format', 'xml'],
+       workdir='/Users/xiesg',
+       capture_output=True, text=True)
+   ```
+
+**历史对比**：
+- 2026-06-20、2026-06-24 的 cron 命令也用了 `@/tmp/merged_bilibili-ai.xml` 绝对路径，但当时 lark-cli 旧版本接受该路径未报错。
+- 2026-06-29 触发新错误（exit_code=2），是 lark-cli 新增的相对路径校验。
+
+**经验**：**任何 lark-cli `--content @<path>` 调用都要用相对路径**（cd 到目标目录，或先 `cp` 到 cwd），即便早期版本允许绝对路径。cron 任务执行时必须先把 XML 放到 `cwd` 或显式 `cd`。
+
+## 14. 2026-06-29 完整工作流 checklist
+
+cron 任务从 0 到完成的标准流程：
+
+```python
+# Step 1: 拉取 popular
+for pn in [1, 2]:
+    url = f"https://api.bilibili.com/x/web-interface/popular?ps=50&pn={pn}"
+    # ... 解析，bvid 去重
+
+# Step 2: search/type 关键词扫荡（注意：不是 search/all/v2！见 §10.1）
+for kw in keywords:
+    for order in ['click', 'pubdate']:
+        for page in [1, 2]:
+            url = f"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={urllib.parse.quote(kw)}&order={order}&page={page}&pagesize=20"
+            # ... 解析
+            time.sleep(0.2)
+
+# Step 3: /view 补全 play/like/duration/title/desc（必做，见 §4）
+for v in candidates.values():
+    if v['source'] == 'search' or v['play'] == 0:
+        # /view call
+        time.sleep(0.08)
+
+# Step 4: 用 main title 提取做 AI 判定（见 §10.2）
+def get_main_title(t):
+    if not t: return t
+    if '|' not in t: return t.strip()
+    return t.split('|', 1)[0].strip()
+ai_videos = [v for v in candidates.values()
+             if is_ai_title_strict(get_main_title(v.get('title_real', v['title'])),
+                                   v.get('desc', ''), '')]
+
+# Step 5: play >= 5000 过滤
+filtered = [v for v in ai_videos if v['play'] >= 5000]
+
+# Step 6: 按 duration 分长短视频（>180s vs <=180s），各取 TOP
+long_v  = sorted([v for v in filtered if dur_secs(v) > 180],  key=lambda x: x['play'], reverse=True)[:15]
+short_v = sorted([v for v in filtered if dur_secs(v) <= 180], key=lambda x: x['play'], reverse=True)[:7]
+
+# Step 7: 生成 XML（DocxXML 包装 + title tag，见 §11.2 warning 1017 可接受）
+# 含 <?xml?> 头 + <docx><title>...<body>...</body></docx>
+# 写本地时戳文件名 + canonical merged_bilibili-ai.xml
+
+# Step 8: 复制到 cwd，再用 lark-cli --content @相对路径 上传（见 §13）
+import shutil
+shutil.copy('/tmp/merged_bilibili-ai.xml', './merged_bilibili-ai.xml')
+subprocess.run(['lark-cli', 'docs', '+update', '--api-version', 'v2',
+                '--doc', 'Virbd3YyBoYK9XxqaZOccEGRnio',
+                '--command', 'overwrite',
+                '--content', '@./merged_bilibili-ai.xml',
+                '--doc-format', 'xml'],
+               cwd='/Users/xiesg', check=True)
+```
+
+**2026-06-29 数据流实测**：
+- popular pn=1+2: 100 条
+- search/type × 13 关键词 × 2 排序 × 2 页: 617 unique 候选
+- tier + main-title 严格过滤: 82 条
+- play >= 5000: 82 条
+- 长视频 65 / 短视频 17
+- TOP 15 长 / TOP 7 短 零肉眼假阳性
+- lark-cli upload: revision_id 61, result: success, 4 warnings (3 个 degrade_code=4007, 1 个 degrade_code=1017)
+
+## 11. lark-cli v2 实测：warnings 演进
+
+### 11.1 2026-06-24 — 3 个 warning
 
 本次 cron 调用：
 ```bash
@@ -226,7 +454,22 @@ lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
 
 **比 2026-06-20 多一个** `<?xml>` warning（之前 2 个）。原因：本次脚本输出包含 `<?xml version="1.0" encoding="UTF-8"?>` 声明行。建议：未来模板去掉 `<?xml ?>` 声明行，仅输出 `<docx>...</docx>` 主体，可能少 1 个 warning。
 
-**结论**：warning 仍是 3 个、非致命，目录正常生成。
+### 11.2 2026-06-29 — 4 个 warning（新出现 `degrade_code=1017` Duplicate title）
+
+2026-06-29 cron 调用同样使用 §11.1 命令（无变化），返回 `revision_id: 61`、`result: "success"`，warnings：
+- `degrade_code=4007,msg=Unsupported tag <?xml> was escaped`
+- `degrade_code=4007,msg=Unsupported tag <docx> was escaped`
+- `degrade_code=4007,msg=Unsupported tag <body> was escaped`
+- `degrade_code=1017,msg=Duplicate document title was filtered: 1 duplicate <title> tag was filtered; the first <title> was kept. Keep only one document title; when using --title, do not also generate another <title> in content`
+
+**新坑**：第 4 个 warning 出现。原因是文档 body 内含 `<title>Bilibili AI热门视频</title>` 标签，而 lark-cli 自身也会生成一个 `<title>` 标签（来自 doc 自身的标题），两者重复。
+
+**注意**：本次 2026-06-29 命令**没有**用 `--title` 参数，只传 `--content @file.xml`，但 lark-cli 仍然自动检测到文件内的 `<title>` 与文档自身标题重复。看起来 lark-cli 2026-06-29 新增了对 body 内 `<title>` 标签的检测（之前不报）。
+
+**结论**：warning 仍是 4 个、非致命，目录正常生成。但 1017 提示可以优化：
+- **方案 A**：body 内不放 `<title>`，只靠 lark-cli 自动继承 doc 标题
+- **方案 B**：body 内保留 `<title>` 标签（便于 XML 自包含），接受 1017 warning
+- 当前 cron 任务使用方案 B（XML 模板要求 `<title>` 固定不变），可继续接受 warning
 
 ## 12. DocxXML `<docx><body>` 包装 + BilibiliAITrending 根节点冲突（原 §7，2026-06-20 实测）
 
