@@ -373,6 +373,102 @@ lark-cli docs +update --api-version v2 --doc "Virbd3YyBoYK9XxqaZOccEGRnio" \
 
 **经验**：**任何 lark-cli `--content @<path>` 调用都要用相对路径**（cd 到目标目录，或先 `cp` 到 cwd），即便早期版本允许绝对路径。cron 任务执行时必须先把 XML 放到 `cwd` 或显式 `cd`。
 
+## 15. execute_code 5 分钟硬超时 — 顺序脚本会被杀（2026-06-30 实测踩坑）
+
+**坑**：cron 调用走 `execute_code` 跑端到端脚本，**单次硬超时 300 秒**。2026-06-29 那版"工作脚本"在 `execute_code` 里跑会**直接 timeout**：
+
+| 阶段 | 顺序耗时（2026-06-30 实测） | 占比 |
+|------|---------------------------|------|
+| popular pn=1+2 | ~2s | 0.7% |
+| search/type × 13 关键词 × 2 排序 × 2 页（52 calls × 0.2s sleep） | ~14s | 5% |
+| **/view 顺序补全（116 条 × 0.08s sleep + 每次响应）** | **~80s** | 27% |
+| search/type × 25 关键词 × 2 × 2（追加 100 calls × 0.1s） | ~20s | 7% |
+| **/view 顺序补全（509 条 × 0.08s sleep + 每次响应）** | **~200s** | 67% |
+| 累计 | **~316s** | 超时 ✗ |
+
+第一次跑端到端 300s 整卡死、0 输出。
+
+**根因**：原工作脚本（§14）`for v in need: ... time.sleep(0.08)` 是单进程串行。/view API 响应快（~50-100ms）但 sleep 0.08s × 600+ 条累积起来就 ~50-100s 纯等待。配合网络抖动和 search 阶段，300s 必爆。
+
+**正确做法 — `xargs -P 20` 并发 /view（实测 509 条 11.9s 完成）**：
+
+```python
+import subprocess, json, time, os
+
+# 把所有要 /view 的 bvid 写入文件
+bvids = [b for b, v in candidates.items() if v['source'] == 'search' and 'title_real' not in v]
+with open('/tmp/bvids.txt', 'w') as f:
+    f.write('\n'.join(bvids))
+
+# 20 并发 curl，每个响应写自己的文件（避免 stdout 拼接乱）
+subprocess.run(
+    ['xargs', '-P', '20', '-I', '{}', 'curl', '-sS', '--max-time', '10',
+     '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 13_7_8) AppleWebKit/537.36',
+     'https://api.bilibili.com/x/web-interface/view?bvid={}',
+     '-o', '/tmp/v_{}.json'],
+    input=open('/tmp/bvids.txt').read(),
+    capture_output=True, text=True, timeout=600
+)
+
+# 逐文件读回、enrich candidate、删除临时文件
+for bvid, v in need:
+    fp = f'/tmp/v_{bvid}.json'
+    if not os.path.exists(fp): continue
+    try:
+        with open(fp) as f:
+            data = json.load(f, strict=False)
+    except: continue
+    if not data or data.get('code') != 0: continue
+    d = data['data']
+    stat = d.get('stat', {})
+    v['play'] = stat.get('view', 0) or v['play']
+    v['like'] = stat.get('like', 0) or 0
+    v['duration'] = d.get('duration', v['duration'])
+    v['author'] = d.get('owner', {}).get('name', v['author'])
+    v['title_real'] = d.get('title', v['title'])
+    v['desc'] = d.get('desc', '') or v['desc']
+    os.remove(fp)
+```
+
+**实测数据**（2026-06-30）：
+- 116 条 /view 并发：4.6s
+- 509 条 /view 并发：11.9s
+- 完全不触发 412 限速（20 并发下 B 站 /view 不限流；popular/search 用 0.1-0.2s 串行 sleep 仍稳定）
+
+**配套约束**：
+- `xargs -P` 上限设 20 即可；再大本地 fd 可能不够，且 B 站 /view 返回快，并发收益边际递减
+- 必须 `-o /tmp/v_{bvid}.json` 每个响应一个文件，**不能** stdout 拼接（并发会乱序/截断）
+- 超时设 600s，xargs 自身会等所有进程退出
+
+**2026-06-30 实测**（用 20 并发 /view + 增量 search）：popular 100 → search 116 → /view 4.6s → 再 search 509 → /view 11.9s → 全流程 ~50s 完成，**300s 余量充足**。
+
+**重要**：`execute_code` 工具是 **5 分钟** 硬上限，**不是** 之前假设的"可以慢慢跑"。任何把"全量 popular + 全量 search + 全量 /view"塞进单个 `execute_code` 的脚本都得用并发 /view，否则必超时。
+
+## 16. 视频 duration 超过 24h — 多为合法课程合集（2026-06-30 实测）
+
+**现象**：AI 过滤后出现多 `duration > 24h` 的视频：
+
+| bvid | duration | title 摘要 | 是否合法 |
+|------|----------|-----------|----------|
+| `BV1Wv411h7kN` | 87h | 李宏毅 2021/2022 机器学习课程 | ✓ 跨 2 学期合集 |
+| `BV1JE411g7XF` | 67h | 李宏毅 2020 机器学习深度学习(完整版) | ✓ 完整版合集 |
+| `BV1j6qzYzE4h` | 47h | 上海交大+腾讯 Python+ML+DL 系列 | ✓ 系列合集 |
+| `BV16F411G7iz` | 39h | 2024 总复习系统课（大合集） | ✗ 与 AI 无关（是物理合集） |
+| `BV168Kf6EEkg` | 44h | MIT 6.034 人工智能 (Patrick Winston) | ✓ |
+| `BV1LBjV6kE9f` | 25h | IBM 安全情报 | ✗ 与 AI 无关 |
+
+**含义**：
+- 长 duration 不一定是脏数据 — 教学/课程合集 24-100h 是正常现象
+- 但**脏数据也混在里面**（物理合集、安全合集命中 tier-1 弱关键词如"学习""智能"），所以 main_title + tier-1 过滤**不能完全剔除非 AI 合集**
+- 当前 cron 用 tier-1 strict（必须含具体 AI 产品/技术词），配合 main_title（剔除 `|` 后缀）已经是合理折中
+
+**实践**：
+- 不要因为 duration > 24h 就过滤掉 — 会误杀合法课程合集
+- TOP 15 长视频里出现 1-2 条 30h+ 的课程**是正常的**，不视为脏数据
+- 但 168862 秒（46h）这种"差 1-2 小时到整"的数字看起来很怪 — 那是因为 `168862 / 60 / 60 = 46.906`，不是真"46:54:22"。display 用 `fmt_dur` 仍按整数除法渲染，会显示 `46:54:22`，**视觉上不美观但数值正确**
+
+**不需要额外修复** — top 榜里放 1-2 条"几十小时 AI 课程合集"是 AI 教程生态的真实形态，不是 bug。
+
 ## 14. 2026-06-29 完整工作流 checklist
 
 cron 任务从 0 到完成的标准流程：

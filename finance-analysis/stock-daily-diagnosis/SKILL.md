@@ -33,7 +33,19 @@ metadata:
 - "XX 的估值是多少"
 - "XX 的护城河分析"
 
-### 1.3 与 `stock-deep-analysis` 的关系
+### 1.3 与 `stock-weekly-forecast` 的关系
+
+**关键区分**：用户问"下周怎么走"→ 用 `stock-weekly-forecast`（必须预测）；用户问"现在什么状态"→ 用本skill（不预测）。
+
+| 用户问法 | 应用的skill |
+|---|---|
+| "XX 下周怎么走" / "预测 XX 未来一周" | `stock-weekly-forecast` |
+| "今日 XX 股价怎么样" / "今天 XX 为什么涨/跌" | `stock-daily-diagnosis`（本skill） |
+| "分析 XX 半年走势" / "XX 的估值" | `stock-deep-analysis` |
+
+**⚠️ 常见错误**：用户要预测时只给诊断 → 用户会说"你这个有意义么"。必须区分"诊断当前状态"和"预测未来走势"。
+
+### 1.4 与 `stock-deep-analysis` 的关系
 
 | 维度 | stock-daily-diagnosis | stock-deep-analysis |
 |---|---|---|
