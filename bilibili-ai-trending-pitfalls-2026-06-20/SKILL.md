@@ -1,6 +1,6 @@
 ---
 name: bilibili-ai-trending-pitfalls-2026-06-20
-description: 2026-06-20 起多 session 实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤 / `豆包` 假阳性（字节 AI vs 食物/昵称/游戏角色）/ tier-1+tier-2 双层关键词架构 / 2026-06-29 search/all/v2 改成 search/type 端点 / 标题 `|tag|tag` 后缀主标题提取 / lark-cli 必须相对路径。
+description: 2026-06-20 起多 session 实测增量。execute_code 是全新解释器（import 不持久）/ Adobe Illustrator 假阳性黑名单 / tname 字段 API 返回空 / search/all/v2 字段足够直接信任 / empty desc 视频不能用弱关键词二次过滤 / `豆包` 假阳性（字节 AI vs 食物/昵称/游戏角色）/ tier-1+tier-2 双层关键词架构 / 2026-06-29 search/all/v2 改成 search/type 端点 / 标题 `|tag|tag` 后缀主标题提取 / lark-cli 必须相对路径 / 2026-07-01 json.dump strict=False 报错 + 整段必须在单 execute_code 内跑完。
 ---
 
 # bilibili-ai-trending — 2026-06-20 实测增量
@@ -469,6 +469,53 @@ for bvid, v in need:
 
 **不需要额外修复** — top 榜里放 1-2 条"几十小时 AI 课程合集"是 AI 教程生态的真实形态，不是 bug。
 
+## 17. 2026-07-01 cron 实测：整段流程必须在单个 execute_code 内跑完（不能跨调用持久）
+
+**2026-07-01 cron 复盘**：本想跟 2026-06-30 一样把流程拆成"popular+search → 落盘 candidates → /view 并发 → 重读 candidates → 过滤排序"的多次 execute_code 调用。**踩坑两个，必须改成单脚本**：
+
+### 17.1 `json.dump(strict=False)` 是错的 — `strict` 不是 dump 的参数
+
+**症状**：
+```
+TypeError: JSONEncoder.__init__() got an unexpected keyword argument 'strict'
+```
+
+**根因**：`strict=False` 是 `json.loads()` 的参数（容错解析含控制字符的 JSON 响应），**不是** `json.dump()` 的参数。`json.dump` 没有 `strict` kwarg。一写就崩。
+
+**正确做法**：
+- 解析 B 站 API 响应：`json.loads(r.stdout, strict=False)` — `strict` 写 loads 才对
+- **落盘**：用 `json.dump(obj, f, ensure_ascii=False)`，**不要**写 `strict`
+- 如果 obj 含 set/tuple/自定义类等非 JSON-native 类型，仍然会 `TypeError: ... is not JSON serializable`，见 §17.2
+
+### 17.2 candidates 字典不能直接 json.dump — 含嵌套 dict 字段
+
+**症状**：2026-07-01 想把 `candidates`（含 `{'owner': {'name': '...'}, 'stat': {...}}` 嵌套结构）落盘到 `/tmp/bili_candidates.json`，但只因为照抄 §11/§13 模板里的 `json.dump(candidates, f, ensure_ascii=False, strict=False)`，先撞 §17.1 报错；改成不带 strict 后又可能撞 `TypeError: Object of type ... is not JSON serializable`（如果值含非原生类型，比如 None 混在 dict 里通常没事，但 deeper 结构可能炸）。
+
+**根因**：B 站 API 响应字段层级复杂，`v.get('owner', {}).get('name', '')` 这种嵌套访问在落地时要小心。**最稳的做法是不要跨 execute_code 持久 candidates**。
+
+### 17.3 正确做法 — 单脚本端到端
+
+整段流程塞进**单次 execute_code 调用**里跑：popular + search + xargs -P 20 /view 并发 + 解析 + 过滤 + 排序 + 写 XML + lark-cli upload。
+
+**实测耗时（2026-07-01）**：
+- popular pn=1+2: ~2s
+- search/type × 13 关键词 × 2 排序 × 2 页: ~80s（13×2×2=52 个 curl × ~1.5s 含 sleep）
+- xargs -P 20 /view × 441 条: ~12s
+- 过滤/排序/写 XML/lark-cli: ~2s
+- **总计 ~96-107s**，5 分钟 execute_code 余量充足
+
+**xargs /view 仍可分离到独立 execute_code 调用**（因为 /view 响应是 per-bvid 写文件，不需要共享 candidates 内存），其它阶段必须同一调用。
+
+**修订后的 §14 checklist 关键改动**：去掉 "candidates → /view → enriched.json" 的跨调用设计，全部塞进一个 Python script 一口气跑完。如果实在要分阶段，**只在 /view 并发阶段切**，且 /view 阶段写文件用 `(bvid, play, like, duration, author, title_real)` 这种扁平 dict（不含嵌套），落盘用 `json.dump` 即可。
+
+### 17.4 验证 — 单脚本跑通的 2026-07-01 数据
+
+- popular 100 条 → search 521 unique → /view 441 条全部 enrichment 成功（0 fail）
+- AI filter: 179 → play>=5000: 89 → long 15 + short 7
+- lark-cli revision_id: 65, result: success, 4 warnings（非致命，§11.1/§11.2）
+- 飞出榜内容肉眼检查无假阳性（Python/Matlab/物理合集都被 main_title + tier-1 干净剔除）
+
+
 ## 14. 2026-06-29 完整工作流 checklist
 
 cron 任务从 0 到完成的标准流程：
@@ -513,7 +560,7 @@ short_v = sorted([v for v in filtered if dur_secs(v) <= 180], key=lambda x: x['p
 # 含 <?xml?> 头 + <docx><title>...<body>...</body></docx>
 # 写本地时戳文件名 + canonical merged_bilibili-ai.xml
 
-# Step 8: 复制到 cwd，再用 lark-cli --content @相对路径 上传（见 §13）
+# Step 8: 复制到 cwd，再用 lark-cli --content @相对路径 上传（见 SKILL §13）
 import shutil
 shutil.copy('/tmp/merged_bilibili-ai.xml', './merged_bilibili-ai.xml')
 subprocess.run(['lark-cli', 'docs', '+update', '--api-version', 'v2',
@@ -523,6 +570,8 @@ subprocess.run(['lark-cli', 'docs', '+update', '--api-version', 'v2',
                 '--doc-format', 'xml'],
                cwd='/Users/xiesg', check=True)
 ```
+
+**⚠️ 2026-07-01 修订**：上面流程必须在**单个 execute_code 调用**里跑完。跨调用持久 candidates 会触发 §17.1 / §17.2 错误。/view 并发阶段是唯一可以独立 execute_code 的阶段（响应写 /tmp/v_{bvid}.json 不需要共享内存）。详见 §17。
 
 **2026-06-29 数据流实测**：
 - popular pn=1+2: 100 条

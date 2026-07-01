@@ -1,7 +1,7 @@
 ---
 name: stock-deep-analysis
 description: 对上市公司（A股/港股/美股中概股）做半年期深度股票分析，从基础数据到估值结论，提供可决策的整合报告。核心特征：(1) 横向对比 + 反证测试（不孤立判断）；(2) 估值给区间不给目标价（不伪科学）；(3) 标注数据可靠度（区分披露vs估算）；(4) 反思机制贯穿全程。
-version: 1.0.0
+version: 1.2.0
 metadata:
   category: finance-analysis
   requires:
@@ -462,6 +462,10 @@ curl -s -A "Mozilla/5.0" "https://qt.gtimg.cn/q=sh600066" | iconv -f GBK -t UTF-
 curl -s -A "Mozilla/5.0" \
   "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&secid=1.600066&num=5"
 # f51=主力(超大单+大单) f52=超大单 f53=大单 f54=中单 f55=小单
+
+# ⚠️ 主力资金字段歧义警告：f51 在某些接口下与按标准定义（f52+f53）计算的方向相反
+# 必须做 3 项内部一致性校验：5 字段之和 ≈ 0 / f51 vs f52+f53 方向一致 / 主力 vs 散户合理性
+# 详见 stock-weekly-forecast/references/main-fund-flow-pitfall.md
 ```
 
 **重要**：搜索引擎搜索不适用于实时数据，必须用 API。
@@ -671,6 +675,10 @@ Step 4：诚实声明局限
 - `templates/report-structure.md`：输出报告结构模板
 - `templates/data-collection.md`：数据采集模板
 
----\n\n**SKILL 版本**：1.1.0
+---\n\n**SKILL 版本**：1.2.0
+**v1.2 更新（2026-06-30）**：
+- 阶段 9.3 A 股资金流向 API 增加主力资金字段歧义警告（f51 与 f52+f53 方向可能相反），指向 `stock-weekly-forecast/references/main-fund-flow-pitfall.md` 查看完整校验流程
+
+**SKILL 版本**：1.1.0
 **核心创新**：横向对比 + 反证测试 + 估值区间 + 反思机制 + **实时数据获取（curl API） + 事后验证纪律**
 **适用**：所有要求"XX 股票半年深度分析"的任务

@@ -1,9 +1,14 @@
-# 2026-06-29 cron: known-good working script
+# 2026-06-29 cron: known-good working script（2026-07-01 二次修正）
 # 关键变更（vs 2026-06-24）：
 # 1. search/all/v2 → search/type?search_type=video（见 SKILL §10.1）
 # 2. tier 判定用 main_title（取第一个 | 之前），剔除 |tag 后缀（见 SKILL §10.2）
 # 3. /view 补全（必做，见 SKILL §4）
 # 4. lark-cli 必须相对路径（见 SKILL §13）：复制 XML 到 cwd 再传 @relative
+# 5. 2026-07-01：整段流程必须在单个 execute_code 里跑完（见 SKILL §17）
+#    不要跨 execute_code 调用持久 candidates — 会触发两个坑：
+#    a) json.dump(strict=False) TypeError（strict 不是 dump 参数，见 §17.1）
+#    b) candidates 含嵌套 dict/json原生不支持类型时 dump 失败（见 §17.2）
+#    单脚本端到端耗时 ~107s（popular 2s + search 13×2×2 80s + xargs -P 20 /view 12s + 解析/排序/写 XML 1s）
 
 import subprocess, json, urllib.parse, time, os, re, html
 from datetime import datetime, timezone, timedelta
